@@ -1,0 +1,1 @@
+var TMD_LATEST_RADAR = {"status": "error", "message": "Initialized"};

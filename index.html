@@ -1,0 +1,4096 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🌊 ระบบนำร่องพยากรณ์น้ำท่วมพระนครศรีอยุธยา | RTSD Tactical GIS</title>
+  <meta name="description" content="ระบบนำร่องพยากรณ์น้ำท่วมระดับตำบล จังหวัดพระนครศรีอยุธยา บูรณาการ Open Data และเตรียมพร้อมนำเข้า ArcGIS Server / QGIS">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+  <!-- RTSD Flood DSS Dataset Scripts (Single Set) -->
+  <script src="ayutthaya_tambon_data.js"></script>
+  <script src="ayutthaya_translation_map.js"></script>
+  <script src="ayutthaya_highres_flood_grid_30m.js"></script>
+  <script src="ayutthaya_tactical_assets.js"></script>
+  <script src="ayutthaya_roads.js"></script>
+  <script src="rivers_thailand_10m.js"></script>
+  <script src="dam_historical_data.js"></script>
+  <script src="latest_radar.js"></script>
+
+  <!-- RTSD Flood DSS Dataset Scripts (Single Set) -->
+
+  <!-- RTSD Flood DSS Dataset Scripts -->
+
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg-base: #060f22;
+      --bg-panel: rgba(10, 22, 47, 0.95);
+      --bg-card: rgba(16, 32, 69, 0.85);
+      --border: rgba(56, 189, 248, 0.18);
+      --border-hi: rgba(56, 189, 248, 0.5);
+      --tx: #e2e8f0;
+      --tx-muted: #94a3b8;
+      --tx-dim: #475569;
+      --accent: #38bdf8;
+      --accent-glow: rgba(56, 189, 248, 0.4);
+      --red: #ef4444;
+      --orange: #f97316;
+      --yellow: #eab308;
+      --green: #22c55e;
+      --r-low: #16a34a;
+      --r-mid: #ca8a04;
+      --r-high: #ea580c;
+      --r-crit: #dc2626;
+      --sidebar-w: 320px;
+      --header-h: 60px;
+    }
+    body {
+      font-family: 'Sarabun', 'Tahoma', sans-serif;
+      background: var(--bg-base);
+      color: var(--tx);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── HEADER ── */
+    #header {
+      height: var(--header-h);
+      background: linear-gradient(135deg, #020617, #0b1528, #020617);
+      border-bottom: 1px solid var(--border-hi);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      flex-shrink: 0;
+      z-index: 600;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+    }
+    .hd-left { display: flex; align-items: center; gap: 12px; }
+    .hd-logo {
+      width: 38px;
+      height: 38px;
+      background: linear-gradient(135deg, #0ea5e9, #1e3a8a);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 0 15px var(--accent-glow);
+      border: 1px solid var(--accent);
+    }
+    .hd-title h1 {
+      font-size: 16px;
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: 0.5px;
+    }
+    .hd-title .sub {
+      font-size: 10px;
+      color: var(--tx-muted);
+      letter-spacing: 0.3px;
+    }
+    .hd-right { display: flex; align-items: center; gap: 15px; }
+    .live-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(34, 197, 94, 0.1);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      border-radius: 20px;
+      padding: 4px 10px;
+      font-size: 10px;
+      color: #4ade80;
+      font-weight: 700;
+    }
+    .live-dot {
+      width: 7px;
+      height: 7px;
+      background: #4ade80;
+      border-radius: 50%;
+      animation: pulseG 1.8s infinite;
+    }
+    @keyframes pulseG {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.3; transform: scale(0.7); }
+    }
+    .clock {
+      font-family: 'Outfit', monospace;
+      font-size: 12px;
+      color: var(--tx-muted);
+      letter-spacing: 0.5px;
+    }
+
+    /* ── MAIN ── */
+    #main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      position: relative;
+    }
+    #map {
+      flex: 1;
+      background: #020617;
+    }
+
+    /* ── SIDEBARS ── */
+    .sidebar {
+      width: var(--sidebar-w);
+      background: var(--bg-panel);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      flex-shrink: 0;
+      backdrop-filter: blur(12px);
+      z-index: 50;
+      transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s ease, opacity 0.3s ease, border-color 0.3s ease;
+    }
+    
+    #left-sidebar { 
+      border-right: 1px solid var(--border); 
+      overflow-y: auto; 
+    }
+    
+    #left-sidebar::-webkit-scrollbar {
+      width: 6px;
+    }
+    #left-sidebar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    #left-sidebar::-webkit-scrollbar-thumb {
+      background: rgba(56, 189, 248, 0.18);
+      border-radius: 3px;
+    }
+    #left-sidebar::-webkit-scrollbar-thumb:hover {
+      background: rgba(56, 189, 248, 0.4);
+    }
+    
+    #right-sidebar { 
+      border-left: 1px solid var(--border); 
+    }
+
+    #right-sidebar.collapsed {
+      width: 0 !important;
+      padding: 0 !important;
+      border-left: none !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+    }
+
+    .sb-section {
+      border-bottom: 1px solid var(--border);
+      padding: 14px 16px;
+    }
+    .sb-section:last-child { border-bottom: none; }
+    
+    .sb-title {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      color: var(--accent);
+      text-transform: uppercase;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .sb-title-icon { font-size: 14px; }
+
+    /* Stats Grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 10px;
+      text-align: center;
+    }
+    .stat-val {
+      font-family: 'Outfit', sans-serif;
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+    .stat-lbl {
+      font-size: 9px;
+      color: var(--tx-muted);
+      margin-top: 2px;
+    }
+    .stat-val.crit { color: var(--red); }
+    .stat-val.high { color: var(--orange); }
+    .stat-val.mid { color: var(--yellow); }
+    .stat-val.low { color: var(--green); }
+
+    /* Inputs & Selects */
+    .form-group {
+      margin-bottom: 10px;
+    }
+    .form-group:last-child { margin-bottom: 0; }
+    .form-label {
+      font-size: 9.5px;
+      color: var(--tx-muted);
+      display: block;
+      margin-bottom: 4px;
+      font-weight: 600;
+    }
+    .form-select, .form-input {
+      width: 100%;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      color: #fff;
+      font-size: 11px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .form-select:focus, .form-input:focus {
+      border-color: var(--accent);
+    }
+
+    /* Slider styling */
+    .slider-container {
+      margin-top: 10px;
+    }
+    .slider-val {
+      font-family: 'Outfit', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 5px;
+      display: flex;
+      justify-content: space-between;
+    }
+    input[type=range] {
+      width: 100%;
+      -webkit-appearance: none;
+      height: 4px;
+      background: var(--border);
+      border-radius: 4px;
+      outline: none;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      border: 2px solid #fff;
+      box-shadow: 0 0 6px var(--accent-glow);
+    }
+
+    /* Buttons */
+    .btn {
+      width: 100%;
+      background: linear-gradient(135deg, rgba(14, 165, 233, 0.2), rgba(14, 165, 233, 0.05));
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 11.5px;
+      font-weight: 700;
+      padding: 8px 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .btn:hover {
+      background: rgba(14, 165, 233, 0.25);
+      border-color: var(--accent);
+      transform: translateY(-1px);
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #0ea5e9, #0284c7);
+      border-color: #38bdf8;
+    }
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+      box-shadow: 0 0 10px var(--accent-glow);
+    }
+
+    /* List group */
+    .list-container {
+      padding: 10px 16px 20px;
+    }
+    .list-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin-bottom: 6px;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+    .list-item:hover {
+      border-color: var(--accent);
+      transform: translateX(3px);
+    }
+    .list-item-name { font-weight: 700; color: #fff; }
+    .list-item-sub { font-size: 8.5px; color: var(--tx-muted); margin-top: 1px; }
+    .list-item-val {
+      font-family: 'Outfit', sans-serif;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 6px;
+    }
+    .badge-crit { background: rgba(220, 38, 36, 0.15); color: #fca5a5; border: 1px solid rgba(220, 38, 36, 0.3); }
+    .badge-high { background: rgba(234, 88, 12, 0.15); color: #fdba74; border: 1px solid rgba(234, 88, 12, 0.3); }
+    .badge-mid { background: rgba(202, 138, 4, 0.15); color: #fde047; border: 1px solid rgba(202, 138, 4, 0.3); }
+    .badge-low { background: rgba(22, 163, 74, 0.15); color: #86efac; border: 1px solid rgba(22, 163, 74, 0.3); }
+
+    /* Map Overlay Legend */
+    #map-legend {
+      position: absolute;
+      bottom: 24px;
+      left: 20px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 14px;
+      backdrop-filter: blur(10px);
+      z-index: 500;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    }
+    .legend-title { font-size: 9px; font-weight: 800; color: var(--accent); letter-spacing: 0.5px; margin-bottom: 2px; }
+    .legend-item { display: flex; align-items: center; gap: 8px; font-size: 10px; color: var(--tx-muted); }
+    .legend-color { width: 12px; height: 12px; border-radius: 3px; }
+
+    /* Basemap toggle */
+    #basemap-toggle {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 4px;
+      z-index: 500;
+      display: flex;
+      gap: 4px;
+    }
+    .bmap-btn {
+      background: transparent;
+      border: none;
+      color: var(--tx-muted);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .bmap-btn.active {
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--accent);
+      border: 1px solid var(--border);
+    }
+
+    /* Popup Styling */
+    .popup-title { font-size: 13px; font-weight: 800; color: #fff; border-bottom: 1px solid var(--border); padding-bottom: 4px; margin-bottom: 6px; }
+    .popup-row { display: flex; justify-content: space-between; font-size: 10px; padding: 2px 0; }
+    .popup-lbl { color: var(--tx-muted); }
+    .popup-val { font-weight: 700; font-family: 'Outfit', sans-serif; }
+
+    /* leaflet override */
+    .leaflet-popup-content-wrapper {
+      background: rgba(6, 13, 31, 0.96) !important;
+      border: 1px solid var(--border-hi) !important;
+      color: var(--tx) !important;
+      border-radius: 8px !important;
+    }
+    .leaflet-popup-tip { background: rgba(6, 13, 31, 0.96) !important; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--border-hi); }
+
+    /* Feed panel */
+    .feed-box {
+      max-height: 100px;
+      overflow-y: auto;
+      background: rgba(0,0,0,0.3);
+      border-radius: 6px;
+      padding: 6px;
+      font-size: 9px;
+      font-family: monospace;
+      color: #38bdf8;
+      border: 1px solid var(--border);
+    }
+    .feed-item { margin-bottom: 4px; border-bottom: 1px dashed rgba(56, 189, 248, 0.1); padding-bottom: 2px; }
+    .feed-item:last-child { margin-bottom: 0; border: none; }
+
+    /* Search premium styling */
+    .search-input-premium {
+      width: 100%;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      color: var(--tx-main);
+      font-size: 11px;
+      outline: none;
+      transition: all 0.3s;
+      box-sizing: border-box;
+    }
+    .search-input-premium:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 8px rgba(14, 165, 233, 0.4);
+    }
+    .search-results-overlay {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      max-height: 180px;
+      overflow-y: auto;
+      z-index: 10000;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+      backdrop-filter: blur(8px);
+      box-sizing: border-box;
+    }
+    .search-result-item {
+      padding: 8px 12px;
+      font-size: 11px;
+      cursor: pointer;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      transition: background 0.2s;
+      color: var(--tx-main);
+    }
+    .search-result-item:hover {
+      background: rgba(14, 165, 233, 0.2);
+      color: #fff;
+    }
+    .search-result-item:last-child {
+      border-bottom: none;
+    }
+
+    /* GPS pulsing dot */
+    .gps-pulse-dot {
+      width: 12px;
+      height: 12px;
+      background: #0ea5e9;
+      border: 2px solid #fff;
+      border-radius: 50%;
+      box-shadow: 0 0 10px rgba(14, 165, 233, 0.8);
+      position: relative;
+    }
+    .gps-pulse-dot::after {
+      content: '';
+      position: absolute;
+      width: 32px;
+      height: 32px;
+      border: 2px solid #0ea5e9;
+      border-radius: 50%;
+      top: -12px;
+      left: -12px;
+      opacity: 0;
+      animation: gps-pulse 1.8s infinite;
+      box-sizing: border-box;
+    }
+    @keyframes gps-pulse {
+      0% {
+        transform: scale(0.5);
+        opacity: 0.8;
+      }
+      100% {
+        transform: scale(1.5);
+        opacity: 0;
+      }
+    }
+
+    /* Floating Layer Control Overlay (Dual-Column Layout) */
+    #layer-control-overlay {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      backdrop-filter: blur(10px);
+      z-index: 500;
+      width: 335px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+      box-sizing: border-box;
+    }
+    .lc-grid-container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px 10px;
+    }
+    .lc-column-title {
+      font-size: 9.5px;
+      font-weight: 800;
+      color: var(--accent);
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      padding-bottom: 2px;
+      margin-bottom: 4px;
+      letter-spacing: 0.3px;
+    }
+    .asset-btn {
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid rgba(255,255,255,0.15);
+      color: #94a3b8;
+      border-radius: 4px;
+      padding: 2px 5px;
+      font-size: 8.5px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .asset-btn:hover {
+      background: rgba(56, 189, 248, 0.2);
+      color: #fff;
+    }
+    .asset-btn.active {
+      background: #38bdf8;
+      color: #0f172a;
+      font-weight: bold;
+      border-color: #38bdf8;
+    }
+    
+    /* Floating Calibration Control Overlay */
+    #calibration-panel-overlay {
+      position: absolute;
+      top: 380px; /* Right below layer control */
+      right: 20px;
+      background: var(--bg-panel);
+      border: 1px solid rgba(167, 139, 250, 0.4);
+      border-radius: 10px;
+      padding: 10px 14px;
+      backdrop-filter: blur(10px);
+      z-index: 500;
+      width: 230px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+      box-sizing: border-box;
+    }
+    
+    /* 4D Spatiotemporal Timeline Player Overlay */
+    #timeline-player-overlay {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 8px 14px;
+      backdrop-filter: blur(12px);
+      z-index: 500;
+      width: 440px;
+      max-width: 90vw;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.6);
+      box-sizing: border-box;
+    }
+    
+    /* Floating Tactical Rescue Navigation Overlay */
+    #rescue-navigator-overlay {
+      position: absolute;
+      top: 140px;
+      left: 20px;
+      background: var(--bg-panel);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      border-radius: 10px;
+      padding: 10px 12px;
+      backdrop-filter: blur(10px);
+      z-index: 500;
+      width: 330px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+      box-sizing: border-box;
+    }
+    .cal-title {
+      font-size: 10px;
+      font-weight: 800;
+      color: #a78bfa;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      border-bottom: 1px solid rgba(167, 139, 250, 0.2);
+      padding-bottom: 4px;
+    }
+    .cal-metric {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 4px 0;
+      font-size: 10px;
+    }
+    .cal-metric span {
+      color: var(--tx-muted);
+    }
+    .cal-metric strong {
+      color: var(--tx-main);
+    }
+    .cal-badge {
+      background: rgba(167, 139, 250, 0.2);
+      color: #c084fc;
+      font-size: 9px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-weight: bold;
+    }
+
+    .lc-title {
+      font-size: 10px;
+      font-weight: 800;
+      color: var(--accent);
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 4px;
+    }
+    .lc-body {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    /* Premium Toggle Switch Styling */
+    .lc-switch-container {
+      display: flex;
+      align-items: center;
+      position: relative;
+      cursor: pointer;
+      user-select: none;
+      font-size: 10.5px;
+      color: var(--tx-muted);
+      padding: 3px 0;
+    }
+    .lc-switch-container input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .lc-slider {
+      position: relative;
+      display: inline-block;
+      width: 26px;
+      height: 14px;
+      background-color: #334155;
+      border-radius: 14px;
+      transition: .3s;
+      margin-right: 8px;
+      flex-shrink: 0;
+    }
+    .lc-slider:before {
+      position: absolute;
+      content: "";
+      height: 8px;
+      width: 8px;
+      left: 3px;
+      bottom: 3px;
+      background-color: #cbd5e1;
+      border-radius: 50%;
+      transition: .3s;
+    }
+    .lc-switch-container input:checked + .lc-slider {
+      background-color: var(--accent);
+      box-shadow: 0 0 6px var(--accent-glow);
+    }
+    .lc-switch-container input:checked + .lc-slider:before {
+      transform: translateX(12px);
+      background-color: #fff;
+    }
+    .lc-label {
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+    .lc-switch-container input:checked ~ .lc-label {
+      color: #fff;
+      font-weight: 600;
+    }
+
+    /* Radar dBZ Legend Overlay */
+    #radar-legend-overlay {
+      position: absolute;
+      bottom: 24px;
+      right: 20px;
+      background: rgba(15, 23, 42, 0.9);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+      z-index: 500;
+      width: 280px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+      display: none; /* Hidden by default */
+      flex-direction: column;
+      gap: 6px;
+      font-family: 'Outfit', sans-serif;
+      box-sizing: border-box;
+    }
+    .rl-title {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--accent);
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 4px;
+      text-transform: uppercase;
+    }
+    .rl-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 10.5px;
+      color: var(--tx-main);
+    }
+    .rl-color {
+      width: 14px;
+      height: 14px;
+      border-radius: 4px;
+      margin-right: 8px;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <div id="header">
+    <div class="hd-left">
+      <div class="hd-logo">🌊</div>
+      <div class="hd-title">
+        <h1>ระบบพยากรณ์น้ำท่วมนำร่องพระนครศรีอยุธยา (RTSD Tactical GIS)</h1>
+        <div class="sub">โครงการนวัตกรรมพยากรณ์เชิงรุกและแผนที่ทหารดิจิทัลระดับตำบล (PoC)</div>
+      </div>
+    </div>
+    <div class="hd-right">
+      <div id="gps-status-badge" onclick="switchHttpsOrExplainGps()" style="display:flex; align-items:center; gap:5px; background:rgba(56, 189, 248, 0.15); border:1px solid rgba(56, 189, 248, 0.4); border-radius:20px; padding:4px 11px; font-size:10px; color:#38bdf8; font-weight:700; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.background='rgba(56, 189, 248, 0.3)'" onmouseout="this.style.background='rgba(56, 189, 248, 0.15)'" title="แตะเพื่อเช็คสิทธิ์ GPS หรือเปิดผ่าน HTTPS">
+        <span id="gps-status-icon">📍</span>
+        <span id="gps-status-text">ตรวจสิทธิ์ GPS</span>
+      </div>
+      <div class="live-badge">
+        <div class="live-dot"></div>
+        <span>LIVE TELEMETRY ACTIVE</span>
+      </div>
+      <div class="clock" id="live-clock">12:00:00</div>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div id="main">
+    
+    <!-- LEFT SIDEBAR: CONTROLS & WEATHER -->
+    <div class="sidebar" id="left-sidebar">
+      
+      <!-- Tactical Overview -->
+      <div class="sb-section">
+        <div class="sb-title">
+          <span class="sb-title-icon">📊</span>
+          <span>ภาพรวมความเสี่ยง (162 ตำบล)</span>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-val crit" id="stat-crit">0</div>
+            <div class="stat-lbl">วิกฤต (>80)</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-val high" id="stat-high">0</div>
+            <div class="stat-lbl">เสี่ยงสูง (60-80)</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-val mid" id="stat-mid">0</div>
+            <div class="stat-lbl">ปานกลาง (40-60)</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-val low" id="stat-low">0</div>
+            <div class="stat-lbl">ปลอดภัย (<40)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Inputs -->
+      <div class="sb-section">
+        <div class="sb-title">
+          <span class="sb-title-icon">📡</span>
+          <span>ข้อมูลตรวจวัดจริง (Real-Time Inputs)</span>
+        </div>
+        <div style="margin-bottom:12px; display:flex; flex-direction:column; gap:4px;">
+          <button onclick="fetchLiveTelemetry()" class="search-btn-premium" style="width:100%; font-size:11px; padding:6px; display:flex; align-items:center; justify-content:center; gap:6px; background:rgba(56,189,248,0.1); border:1px solid var(--border-hi); border-radius:4px; color:var(--accent); cursor:pointer; font-weight:bold; transition:all 0.2s;" onmouseover="this.style.background='rgba(56,189,248,0.2)'" onmouseout="this.style.background='rgba(56,189,248,0.1)'">
+            <span>🔄</span> ซิงก์ข้อมูลจริงสนาม (Live Sync)
+          </button>
+          <div id="sync-time-label" style="font-size:9px; color:var(--tx-muted); text-align:center; font-family:'Outfit', sans-serif;">
+            อัปเดตล่าสุด: ยังไม่ได้เชื่อมต่อ
+          </div>
+        </div>
+        <div class="form-group">
+          <span class="form-label">ระดับน้ำสถานี C.35 (อยุธยา)</span>
+          <div style="font-family:'Outfit', sans-serif; font-size:14px; font-weight:700; color:#38bdf8;">
+            <span id="c35-discharge">1,150</span> m³/s <span style="font-size:9.5px; color:var(--tx-muted); font-weight:normal;">(เกณฑ์วิกฤต: 1,500 m³/s)</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <span class="form-label">ปริมาณน้ำฝนสดในพื้นที่ (อยุธยา)</span>
+          <div style="font-family:'Outfit', sans-serif; font-size:14px; font-weight:700; color:#4ade80;">
+            <span id="live-rain">12.5</span> mm/hr <span id="rain-desc" style="font-size:9.5px; color:var(--tx-muted); font-weight:normal;">(ฝนปานกลาง)</span>
+          </div>
+        </div>
+        <div class="form-group" style="margin-top:8px; border-top:1px dashed rgba(255,255,255,0.08); padding-top:8px;">
+          <span class="form-label">📅 เลือกวันที่ยุทธการ (ย้อนหลัง/คาดการณ์):</span>
+          <input type="date" id="sim-date" class="search-input-premium" min="2024-06-01" max="2027-01-12" value="2026-07-05" onchange="loadDateTelemetry(this.value)">
+          <div id="telemetry-trend-box" style="margin-top:8px; font-size:10px; color:var(--tx-muted); background:rgba(255,255,255,0.04); padding:6px; border-radius:4px; border:1px solid rgba(255,255,255,0.05); display:none;">
+            <b>🌊 แนวโน้มน้ำสะสม 3 วันถัดไป:</b> <span id="telemetry-trend-val" style="font-weight:bold; color:var(--accent);">ทรงตัว</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Search & GPS Section -->
+      <div class="sb-section">
+        <div class="sb-title">
+          <span class="sb-title-icon">🔍</span>
+          <span>ค้นหาพื้นที่ & GPS (Search & GPS)</span>
+        </div>
+        
+        <!-- Search Input -->
+        <div class="form-group" style="position:relative; margin-bottom:10px;">
+          <span class="form-label">ค้นหาชื่อตำบล/อำเภอ:</span>
+          <input type="text" id="txt-search" class="search-input-premium" placeholder="พิมพ์ชื่อตำบล เช่น เสนา, บางบาล..." oninput="searchTambon(this.value)">
+          <div id="search-results-box" class="search-results-overlay" style="display:none;"></div>
+        </div>
+        
+        <!-- GPS Locate Button (Dark Styled as requested) -->
+        <button class="action-btn" id="btn-gps" onclick="locateUserDevice()" style="background: rgba(15, 23, 42, 0.95); border: 1px solid rgba(56, 189, 248, 0.4); color: #38bdf8; font-size:11px; margin-top:4px; width:100%; border-radius:6px; height:32px; line-height:30px; padding:0; font-weight:700; box-shadow: 0 2px 6px rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center; gap:6px; cursor:pointer;" onmouseover="this.style.background='rgba(30, 41, 59, 0.95)'" onmouseout="this.style.background='rgba(15, 23, 42, 0.95)'">
+          <span>📍</span> ระบุตำแหน่งปัจจุบันของฉัน (GPS)
+        </button>
+      </div>
+
+      <!-- Time & Dam Simulator -->
+      <div class="sb-section">
+        <div class="sb-title">
+          <span class="sb-title-icon">⏳</span>
+          <span>จำลองน้ำฝน & ระบายน้ำเขื่อน</span>
+        </div>
+        
+        <!-- Rain Slider -->
+        <div class="slider-container" style="margin-bottom:12px;">
+          <div class="slider-val">
+            <span>ฝนสะสมจำลอง:</span>
+            <span id="slider-rain-val">12 mm/hr</span>
+          </div>
+          <input type="range" id="slider-rain" min="0" max="60" value="12" oninput="updateRainSimulation(this.value)">
+        </div>
+        
+        <!-- Chao Phraya Dam Slider -->
+        <div class="slider-container" style="margin-bottom:12px;">
+          <div class="slider-val">
+            <span>ระบายน้ำเขื่อนเจ้าพระยา:</span>
+            <span id="slider-cp-val" style="color:#38bdf8;">1,150 m³/s</span>
+          </div>
+          <input type="range" id="slider-cp" min="500" max="3500" step="50" value="1150" oninput="updateDamSimulation('cp', this.value)">
+        </div>
+        
+        <!-- Pasak Jolasid Dam Slider -->
+        <div class="slider-container">
+          <div class="slider-val">
+            <span>ระบายน้ำเขื่อนป่าสักฯ:</span>
+            <span id="slider-pasak-val" style="color:#22d3ee;">250 m³/s</span>
+          </div>
+          <input type="range" id="slider-pasak" min="50" max="1200" step="10" value="250" oninput="updateDamSimulation('pasak', this.value)">
+        </div>
+        
+        <div style="font-size:9px; color:var(--tx-muted); margin-top:8px; line-height:1.4;">
+          💡 <b>เกณฑ์ระบายน้ำล้นตลิ่งวิกฤต:</b><br>
+          - เขื่อนเจ้าพระยา > 1,500 m³/s เริ่มท่วม ผักไห่ เสนา บางบาล<br>
+          - เขื่อนป่าสักฯ > 700 m³/s เริ่มท่วม ท่าหลวง นครหลวง เกาะเมือง
+        </div>
+      </div>
+
+      <!-- 4D Spatiotemporal Timeline Player Section (Phase 6 WeatherLab) -->
+      <div class="sb-section" style="margin-top:8px; background:rgba(15, 23, 42, 0.95); border:1px solid rgba(56, 189, 248, 0.3);">
+        <div class="sb-title" style="display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:flex; align-items:center; gap:4px; color:var(--accent);">
+            <span class="sb-title-icon">⏱️</span>
+            <span>ตัวเล่นมิติเวลา 4D (WeatherLab)</span>
+          </div>
+          <div style="font-size:9px; background:rgba(56, 189, 248, 0.15); color:#38bdf8; padding:1px 6px; border-radius:10px; border:1px solid rgba(56, 189, 248, 0.3); font-weight:bold;" id="tp-badge">
+            T+0h (ปัจจุบัน)
+          </div>
+        </div>
+
+        <div style="display:flex; gap:4px; margin-bottom:8px; justify-content:center;">
+          <button onclick="setTimelineStep(0)" style="flex:1; background:rgba(56, 189, 248, 0.15); border:1px solid rgba(56, 189, 248, 0.3); color:#38bdf8; font-size:9px; padding:3px; border-radius:4px; cursor:pointer; font-weight:bold;">📍 ปัจจุบัน (T+0)</button>
+          <button onclick="setTimelineStep(24)" style="flex:1; background:rgba(239, 68, 68, 0.15); border:1px solid rgba(239, 68, 68, 0.3); color:#f87171; font-size:9px; padding:3px; border-radius:4px; cursor:pointer; font-weight:bold;">🚨 สูงสุด (T+24)</button>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:6px;">
+          <button onclick="toggleTimelinePlay()" id="tp-play-btn" style="background:linear-gradient(135deg, #0284c7, #2563eb); border:none; color:#fff; border-radius:4px; padding:4px 8px; font-size:10px; font-weight:bold; cursor:pointer; min-width:55px; text-align:center;">
+            ▶ เล่น
+          </button>
+          <button onclick="stepTimeline(-1)" style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.15); color:#fff; border-radius:4px; padding:3px 6px; font-size:9px; cursor:pointer;" title="ถอยหลัง 3 ชม.">⏮</button>
+          <input type="range" id="tp-slider" min="0" max="24" step="3" value="0" oninput="onTimelineSliderChange(this.value)" style="flex:1; cursor:pointer; accent-color:var(--accent);">
+          <button onclick="stepTimeline(1)" style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.15); color:#fff; border-radius:4px; padding:3px 6px; font-size:9px; cursor:pointer;" title="ไปข้างหน้า 3 ชม.">⏭</button>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:8px; color:var(--tx-muted); margin-top:4px; padding:0 2px;">
+          <span>T+0h</span>
+          <span>T+3h</span>
+          <span>T+6h</span>
+          <span>T+12h</span>
+          <span>T+18h</span>
+          <span>T+24h</span>
+        </div>
+      </div>
+
+      <!-- Tactical Assets Status Section -->
+      <div class="sb-section" style="margin-top:8px;">
+        <div class="sb-title">
+          <span class="sb-title-icon">🎖️</span>
+          <span>สถานะจุดยุทธศาสตร์ยุทธวิธี</span>
+        </div>
+        <div id="tactical-assets-list" style="font-size:10px; max-height:120px; overflow-y:auto; display:flex; flex-direction:column; gap:4px;">
+          <!-- populated dynamically -->
+        </div>
+      </div>
+
+      <!-- Risk List -->
+      <div style="padding: 10px 16px 2px; font-size:10px; font-weight:700; color:var(--accent); text-transform:uppercase;">
+        📍 จัดลำดับตำบลกลุ่มเสี่ยงสูงสุด
+      </div>
+      <div class="list-container" id="risk-list">
+        <!-- populated dynamically -->
+      </div>
+    </div>
+
+    <!-- MAP VIEW & OVERLAYS CONTAINER -->
+    <div id="map-container" style="flex: 1; position: relative; display: flex; flex-direction: column; overflow: hidden;">
+      <div id="map" style="flex: 1; width: 100%; height: 100%;"></div>
+
+      <!-- Map Legend Overlay -->
+      <div id="map-legend">
+        <div class="legend-title">ระดับความเสี่ยงพยากรณ์</div>
+        <div class="legend-item">
+          <div class="legend-color" style="background: var(--r-crit);"></div>
+          <span>วิกฤต / น้ำท่วมขังเด่นชัด (Risk >80)</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background: var(--r-high);"></div>
+          <span>เสี่ยงสูง / จ่อล้นตลิ่ง (Risk 60-80)</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background: var(--r-mid);"></div>
+          <span>เสี่ยงปานกลาง / ที่ลุ่มขังชั่วคราว (Risk 40-60)</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background: var(--r-low);"></div>
+          <span>ปลอดภัย / ปกติ (Risk <40)</span>
+        </div>
+      </div>
+
+      <!-- Basemap Selector Overlay -->
+      <div id="basemap-toggle">
+        <button class="bmap-btn active" id="btn-satellite" onclick="changeBasemap('sat')">📷 Imagery Hybrid</button>
+        <button class="bmap-btn" id="btn-topo" onclick="changeBasemap('topo')">🏔️ Military Topo</button>
+        <button class="bmap-btn" style="background:rgba(56,189,248,0.2); border-color:rgba(56,189,248,0.4); color:#38bdf8; font-weight:bold;" onclick="toggleNavigatorPanel()">🧭 นำทางกู้ภัยหลบน้ำ</button>
+      </div>
+
+      <!-- Floating Tactical Rescue Navigation Panel (Phase 7) -->
+      <div id="rescue-navigator-overlay" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(56, 189, 248, 0.3); padding-bottom:4px; margin-bottom:6px;">
+          <div style="font-size:10.5px; font-weight:bold; color:var(--accent); display:flex; align-items:center; gap:4px;">
+            <span>🧭 นำทางกู้ภัยอัจฉริยะหลบน้ำท่วม</span>
+          </div>
+          <button onclick="toggleNavigatorPanel(false)" style="background:rgba(255,255,255,0.1); border:none; color:#38bdf8; cursor:pointer; font-size:10px; font-weight:bold; border-radius:3px; padding:1px 5px; line-height:1;" title="ปิดแผงนำทาง">✖</button>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:5px; font-size:10px;">
+          <!-- Start Location -->
+          <div style="display:flex; gap:4px; align-items:center;">
+            <span style="color:#4ade80; font-weight:bold; width:55px;">📍 ต้นทาง:</span>
+            <button onclick="setRoutingStartMode('gps')" id="btn-route-gps" class="asset-btn active" style="flex:1;">🎯 GPS ปัจจุบัน</button>
+            <button onclick="setRoutingStartMode('map')" id="btn-route-click" class="asset-btn" style="flex:1;">📍 คลิกแผนที่</button>
+          </div>
+
+          <!-- Target Asset Destination (Searchable & Proximity Sorted) -->
+          <div style="display:flex; flex-direction:column; gap:3px;">
+            <div style="display:flex; gap:4px; align-items:center;">
+              <span style="color:#f87171; font-weight:bold; width:55px;">🎯 จุดหมาย:</span>
+              <input type="text" id="txt-route-search" placeholder="🔍 พิมพ์ชื่อ รพ. / โรงเรียน / จุดหมาย..." oninput="populateRouteTargetOptions(this.value)" style="flex:1; background:rgba(30,41,59,0.9); border:1px solid rgba(255,255,255,0.2); color:#fff; font-size:9.5px; border-radius:4px; padding:3px 6px;">
+            </div>
+            <select id="sel-route-target" onchange="onRouteTargetSelected(this.value)" style="width:100%; background:rgba(30,41,59,0.9); border:1px solid rgba(56,189,248,0.4); color:#fff; font-size:9.5px; border-radius:4px; padding:4px; cursor:pointer;">
+              <option value="">-- เลือกสถานที่เป้าหมาย (320 จุด) --</option>
+            </select>
+          </div>
+
+          <!-- Action Buttons -->
+          <div style="display:flex; gap:4px; margin-top:2px;">
+            <button onclick="calculateRescueRoute()" style="flex:1; background:linear-gradient(135deg, #059669, #10b981); border:none; color:#fff; border-radius:4px; padding:5px; font-size:10.5px; font-weight:bold; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,0.3);">
+              🚀 คำนวณเส้นทางหลบน้ำท่วม
+            </button>
+            <button onclick="clearRescueRoute()" style="background:rgba(239, 68, 68, 0.2); border:1px solid rgba(239, 68, 68, 0.4); color:#f87171; border-radius:4px; padding:5px 8px; font-size:10px; font-weight:bold; cursor:pointer;">
+              🧹 ล้างเส้นทาง
+            </button>
+          </div>
+
+          <!-- Route Output Banner -->
+          <div id="route-output-banner" style="display:none; margin-top:4px; padding:6px; background:rgba(15, 23, 42, 0.9); border:1px solid rgba(56, 189, 248, 0.4); border-radius:6px; font-size:9.5px; line-height:1.35;"></div>
+
+          <!-- Safety Caution Notice -->
+          <div style="font-size:8.5px; color:#fb923c; background:rgba(249, 115, 22, 0.1); border:1px solid rgba(249, 115, 22, 0.25); border-radius:4px; padding:4px; margin-top:2px; line-height:1.2;">
+            ⚠️ <b>ข้อควรระวังยุทธการ:</b> ระบบคำนวณหลบเลี่ยงจากระดับน้ำขัง โปรดระวังกระแสน้ำเชี่ยวหน้างานจริง และสามารถกด [Override] เพื่อแจ้งสถานะถนนสดจากสนามได้
+        </div>
+      </div>
+
+      <!-- Google Maps Navigation Overview Top Card & Bottom Drawer -->
+      <div id="gmaps-top-card" class="gmaps-top-card" style="display:none;">
+        <div style="display:flex; align-items:center; gap:8px; font-size:12px; margin-bottom:6px;">
+          <span style="color:#2563eb; font-weight:bold;">🔵</span>
+          <span style="font-weight:bold; color:#1f2937;">ตำแหน่งของคุณ</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; font-size:12px; border-top:1px solid #e5e7eb; padding-top:6px;">
+          <span style="color:#dc2626; font-weight:bold;">📍</span>
+          <span id="gmaps-dest-name" style="font-weight:bold; color:#111827;">โรงพยาบาลพระนครศรีอยุธยา</span>
+        </div>
+      </div>
+
+      <div id="gmaps-bottom-drawer" class="gmaps-bottom-drawer" style="display:none;">
+        <!-- Transport Mode Icons -->
+        <div style="display:flex; justify-content:space-around; border-bottom:1px solid #e5e7eb; padding-bottom:10px; margin-bottom:12px; font-size:13px; font-weight:bold; color:#4b5563;">
+          <div style="color:#2563eb; border-bottom:2px solid #2563eb; padding-bottom:4px; display:flex; align-items:center; gap:4px;">🚘 <span id="drawer-tab-time">19 นาที</span></div>
+          <div style="display:flex; align-items:center; gap:4px;">🚛 รถทหาร/SUV</div>
+          <div style="display:flex; align-items:center; gap:4px;">🚤 เรือกู้ภัย</div>
+        </div>
+
+        <!-- Travel ETA Stats -->
+        <div style="margin-bottom:14px;">
+          <div style="display:flex; align-items:baseline; gap:8px;">
+            <span id="gmaps-eta-time" style="font-size:26px; font-weight:900; color:#15803d;">19 นาที</span>
+            <span style="color:#16a34a; font-weight:bold; font-size:14px;">🍃</span>
+          </div>
+          <div id="gmaps-eta-sub" style="font-size:12px; color:#4b5563; margin-top:2px;">
+            ถึง <span id="gmaps-eta-clock">13:26</span> • <span id="gmaps-eta-dist">9.3 กม.</span> • 🟢 เลี่ยงน้ำท่วม 100%
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div style="display:flex; gap:10px;">
+          <button onclick="startActiveTurnByTurnNav()" style="flex:1.5; background:#0284c7; color:#ffffff; border:none; border-radius:24px; padding:12px; font-size:14px; font-weight:bold; cursor:pointer; box-shadow:0 4px 12px rgba(2,132,199,0.3); display:flex; align-items:center; justify-content:center; gap:6px;">
+            <span>▲</span> เริ่มต้นการนำทาง
+          </button>
+          <button onclick="clearRescueRoute()" style="flex:1; background:#f3f4f6; color:#374151; border:none; border-radius:24px; padding:12px; font-size:13px; font-weight:bold; cursor:pointer;">
+            ✖ ปิด
+          </button>
+        </div>
+      </div>
+
+      <!-- Turn-by-Turn Active Navigation HUD (Screenshot 1 Mode) -->
+      <div id="gmaps-active-hud-top" class="gmaps-active-hud-top" style="display:none;">
+        <div style="display:flex; align-items:center; gap:14px;">
+          <div style="font-size:32px; font-weight:900; color:#ffffff;">⬆️</div>
+          <div>
+            <div id="hud-turn-title" style="font-size:18px; font-weight:bold; color:#ffffff; line-height:1.2;">มุ่งหน้าทางตะวันออก</div>
+            <div id="hud-turn-sub" style="font-size:12px; color:#a7f3d0; margin-top:3px;">อีก 2.4 กม. แล้ว ↰ เลี้ยวซ้ายเข้าถนนอู่ทอง</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="gmaps-active-hud-bottom" class="gmaps-active-hud-bottom" style="display:none;">
+        <div style="display:flex; flex-direction:column; align-items:center; font-size:11px; color:#6b7280; font-weight:bold;">
+          <span style="font-size:14px; font-weight:900; color:#111827;">--</span>
+          <span>km/h</span>
+        </div>
+
+        <div>
+          <div id="hud-active-eta-time" style="font-size:22px; font-weight:900; color:#15803d;">20 นาที</div>
+          <div id="hud-active-eta-sub" style="font-size:11px; color:#4b5563;"><span id="hud-active-dist">9.3 กม.</span> • ถึง <span id="hud-active-clock">13:25</span></div>
+        </div>
+
+        <button onclick="exitActiveTurnByTurnNav()" style="background:#dc2626; color:#ffffff; border:none; border-radius:24px; padding:10px 20px; font-size:14px; font-weight:bold; cursor:pointer; box-shadow:0 4px 12px rgba(220,38,38,0.3);">
+          🛑 ออก
+        </button>
+      </div>
+
+      <!-- Floating Layer Control Overlay (Dual-Column Layout with Collapse Toggle) -->
+      <div id="layer-control-overlay">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <div class="lc-title" style="margin-bottom:0;">📂 ควบคุมชั้นข้อมูล (Layer Control)</div>
+          <button onclick="toggleLayerControlCollapse()" id="btn-lc-collapse" style="background:rgba(255,255,255,0.1); border:none; color:var(--accent); cursor:pointer; font-size:10px; font-weight:bold; border-radius:3px; padding:2px 6px; line-height:1;" title="ย่อ/ขยายแผงควบคุม">▼ ย่อ</button>
+        </div>
+        
+        <div id="lc-body-container">
+          <div class="lc-grid-container">
+          <!-- Column 1: Physical / Geographic Layers -->
+          <div>
+            <div class="lc-column-title" style="color:#60a5fa;">📌 กายภาพ/ภูมิประเทศ</div>
+            <label class="lc-switch-container">
+              <input type="checkbox" id="chk-tambon" checked onchange="toggleLayer('tambon')">
+              <span class="lc-slider"></span>
+              <span class="lc-label">ขอบเขตตำบล 🗺️</span>
+            </label>
+            <label class="lc-switch-container">
+              <input type="checkbox" id="chk-rivers" checked onchange="toggleLayer('rivers')">
+              <span class="lc-slider"></span>
+              <span class="lc-label">ลำน้ำ/คลอง 🌊</span>
+            </label>
+            <label class="lc-switch-container">
+              <input type="checkbox" id="chk-stations" checked onchange="toggleLayer('stations')">
+              <span class="lc-slider"></span>
+              <span class="lc-label">โทรมาตร C.35 📡</span>
+            </label>
+            <label class="lc-switch-container">
+              <input type="checkbox" id="chk-surveys" checked onchange="toggleLayer('surveys')">
+              <span class="lc-slider"></span>
+              <span class="lc-label">รายงาน Survey123</span>
+            </label>
+            <label class="lc-switch-container">
+              <input type="checkbox" id="chk-radar" checked onchange="toggleLayer('radar')">
+              <span class="lc-slider"></span>
+              <span class="lc-label">เรดาร์ฝนสด TMD 📡</span>
+            </label>
+          </div>
+
+          <!-- Column 2: Tactical & Grid Layers -->
+          <div>
+            <div class="lc-column-title" style="color:#a78bfa;">🎯 ข่ายยุทธวิธี & คำนวณ</div>
+            <label class="lc-switch-container">
+              <input type="checkbox" id="chk-grid_500m" onchange="toggleLayer('grid_500m')">
+              <span class="lc-slider"></span>
+              <span class="lc-label" style="color:var(--accent); font-weight:bold;">กริดคาดการณ์ 500m 🔲</span>
+            </label>
+            <label class="lc-switch-container">
+              <input type="checkbox" id="chk-grid_30m" onchange="toggleLayer('grid_30m')">
+              <span class="lc-slider"></span>
+              <span class="lc-label" style="color:#a78bfa; font-weight:bold;">กริดยุทธวิธี 30m 📍</span>
+            </label>
+            <label class="lc-switch-container">
+              <input type="checkbox" id="chk-tactical_assets" checked onchange="toggleLayer('tactical_assets')">
+              <span class="lc-slider"></span>
+              <span class="lc-label" style="color:#38bdf8; font-weight:bold;">สถานที่ยุทธศาสตร์ 📍</span>
+            </label>
+            <label class="lc-switch-container">
+              <input type="checkbox" id="chk-roads" onchange="toggleLayer('roads')">
+              <span class="lc-slider"></span>
+              <span class="lc-label" style="color:#34d399; font-weight:bold;">🛣️ โครงข่ายถนน & ความเสี่ยงบ่าท่วม</span>
+            </label>
+            <label class="lc-switch-container">
+              <input type="checkbox" id="chk-calibration_panel" checked onchange="toggleCalibrationPanel(this.checked)">
+              <span class="lc-slider"></span>
+              <span class="lc-label" style="color:#c084fc; font-weight:bold;">แผงความเชื่อมั่น 🛰️</span>
+            </label>
+            <div style="margin-top:4px; padding-top:4px; border-top:1px dotted rgba(255,255,255,0.1);">
+              <div class="lc-column-title" style="color:#f472b6; margin-bottom:2px;">🎛️ เปรียบเทียบโมเดล AI</div>
+              <select id="sel-model_mode" onchange="changeModelComparisonMode(this.value)" style="width:100%; background:rgba(30,41,59,0.9); border:1px solid rgba(244,114,182,0.4); color:#fff; font-size:9px; border-radius:4px; padding:2px 4px; cursor:pointer;">
+                <option value="ai_sar">🤖 AI SAR Cal (ดาวเทียมจริง)</option>
+                <option value="physical">📐 Physical Baseline (DEM)</option>
+                <option value="sentinel">🛰️ Sentinel-1 Real Sat (GISTDA)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Full Width Category Filters & Zoom Notice -->
+        <div style="border-top:1px dashed rgba(255,255,255,0.15); margin-top:6px; padding-top:4px;">
+          <div id="asset-zoom-notice" style="font-size:9px; line-height:1.2; margin-bottom:3px;"></div>
+          <div id="asset-filter-buttons" style="display:flex; gap:3px; flex-wrap:wrap;">
+            <button onclick="setAssetCategoryFilter('all')" class="asset-btn active" id="af-all">ทั้งหมด</button>
+            <button onclick="setAssetCategoryFilter('School')" class="asset-btn" id="af-School">🏫 รร.</button>
+            <button onclick="setAssetCategoryFilter('Hospital')" class="asset-btn" id="af-Hospital">🏥 รพ.</button>
+            <button onclick="setAssetCategoryFilter('Temple')" class="asset-btn" id="af-Temple">🛕 วัดน้ำท่วม</button>
+            <button onclick="setAssetCategoryFilter('Government')" class="asset-btn" id="af-Government">🏛️ อบต.</button>
+          </div>
+        </div>
+        </div>
+      </div>
+
+      <!-- Floating Calibration Control Overlay (Phase 4.2 Auto-Calibration Indicator & WeatherBench Metrics) -->
+      <div id="calibration-panel-overlay">
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid rgba(167, 139, 250, 0.2); padding-bottom: 4px; margin-bottom: 6px;">
+          <div class="cal-title" style="margin-bottom:0; border-bottom:none; padding-bottom:0;">🛰️ ความเชื่อมั่นพยากรณ์ (SAR Cal)</div>
+          <button onclick="toggleCalibrationPanel(false)" style="background:rgba(255,255,255,0.1); border:none; color:#a78bfa; cursor:pointer; font-size:10px; font-weight:bold; border-radius:3px; padding:1px 5px; line-height:1;" title="ปิดแผงความเชื่อมั่น">✖</button>
+        </div>
+        <div class="cal-metric">
+          <span>ความแม่นยำ F1-Score</span>
+          <span class="cal-badge" id="cal-f1" style="background:#059669; color:#fff; font-weight:bold;">0.9953</span>
+        </div>
+        <div class="cal-metric">
+          <span>ความน่าเชื่อถือ (Accuracy)</span>
+          <strong id="cal-accuracy" style="color:#34d399;">99.5%</strong>
+        </div>
+        <div class="cal-metric" style="border-top: 1px dashed rgba(255,255,255,0.1); margin-top: 6px; padding-top: 4px;">
+          <span>การหน่วงน้ำ (Decay)</span>
+          <strong id="cal-decay">0.05</strong>
+        </div>
+        <div class="cal-metric">
+          <span>อิทธิพลความชัน (Damping)</span>
+          <strong id="cal-damping">0.50</strong>
+        </div>
+        <div style="font-size:9px; text-align:center; margin-top:6px; font-weight:bold; color:#a78bfa; background:rgba(167,139,250,0.12); padding:3px; border-radius:4px; border:1px solid rgba(167,139,250,0.25);" id="cal-status">
+          🟢 WeatherBench SAR-Verified (Sentinel-1)
+        </div>
+      </div>
+
+      <!-- Radar Legend Overlay -->
+      <div id="radar-legend-overlay">
+        <div class="rl-title">⚡ เกณฑ์ความเข้มฝนเรดาร์ (dBZ)</div>
+        <div class="rl-item">
+          <div style="display:flex; align-items:center;">
+            <div class="rl-color" style="background:#00ff00; border:1px solid rgba(255,255,255,0.2);"></div>
+            <span>ฝนเล็กน้อย (Light Rain)</span>
+          </div>
+          <span style="color:var(--tx-muted); font-size:9.5px;">10.5 – 29.9 dBZ</span>
+        </div>
+        <div class="rl-item">
+          <div style="display:flex; align-items:center;">
+            <div class="rl-color" style="background:#ffff00; border:1px solid rgba(255,255,255,0.2);"></div>
+            <span>ฝนปานกลาง (Moderate)</span>
+          </div>
+          <span style="color:var(--tx-muted); font-size:9.5px;">30.0 – 39.9 dBZ</span>
+        </div>
+        <div class="rl-item">
+          <div style="display:flex; align-items:center;">
+            <div class="rl-color" style="background:#ff9900; border:1px solid rgba(255,255,255,0.2);"></div>
+            <span>ฝนหนัก (Heavy Rain)</span>
+          </div>
+          <span style="color:var(--tx-muted); font-size:9.5px;">40.0 – 49.9 dBZ</span>
+        </div>
+        <div class="rl-item">
+          <div style="display:flex; align-items:center;">
+            <div class="rl-color" style="background:#ff00ff; border:1px solid rgba(255,255,255,0.2);"></div>
+            <span>ฝนหนักมาก (Very Heavy)</span>
+          </div>
+          <span style="color:var(--tx-muted); font-size:9.5px;">≥ 50.0 dBZ</span>
+        </div>
+        <button onclick="showRadarLegend(false)" style="margin-top:6px; background:rgba(239, 68, 68, 0.15); border:1px solid rgba(239, 68, 68, 0.3); border-radius:4px; color:#f87171; font-size:9px; padding:4px; cursor:pointer; font-weight:bold; width:100%; transition:all 0.2s;" onmouseover="this.style.background='rgba(239, 68, 68, 0.3)'" onmouseout="this.style.background='rgba(239, 68, 68, 0.15)'">
+          ❌ ซ่อนเกณฑ์เรดาร์
+        </button>
+      </div>
+
+      <!-- Sliding Tab Toggle Left Sidebar Handle -->
+      <div id="left-sidebar-toggle-handle" onclick="toggleLeftSidebar()" style="position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 14px; height: 75px; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(8px); border: 1px solid var(--border); border-left: none; border-radius: 0 6px 6px 0; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 1000; color: var(--accent); font-size: 10px; transition: all 0.2s; box-shadow: 3px 0 8px rgba(0,0,0,0.4);" onmouseover="this.style.background='rgba(56,189,248,0.18)'; this.style.color='#fff';" onmouseout="this.style.background='rgba(15, 23, 42, 0.95)'; this.style.color='var(--accent)';">
+        <span id="left-toggle-icon">◀</span>
+      </div>
+
+      <!-- Sliding Tab Toggle Right Sidebar Handle -->
+      <div id="sidebar-toggle-handle" onclick="toggleRightSidebar()" style="position: absolute; right: 0; top: 50%; transform: translateY(-50%); width: 14px; height: 75px; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(8px); border: 1px solid var(--border); border-right: none; border-radius: 6px 0 0 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 1000; color: var(--accent); font-size: 10px; transition: all 0.2s; box-shadow: -3px 0 8px rgba(0,0,0,0.4);" onmouseover="this.style.background='rgba(56,189,248,0.18)'; this.style.color='#fff';" onmouseout="this.style.background='rgba(15, 23, 42, 0.95)'; this.style.color='var(--accent)';">
+        <span id="toggle-icon">▶</span>
+      </div>
+    </div>
+
+    <!-- RIGHT SIDEBAR: MILITARY GIS & SURVEY123 INTEGRATION -->
+    <div class="sidebar" id="right-sidebar">
+      
+      <!-- ArcGIS Portal Integration -->
+      <div class="sb-section">
+        <div class="sb-title">
+          <span class="sb-title-icon">⚙️</span>
+          <span>เชื่อมต่อ ArcGIS / QGIS Server</span>
+        </div>
+        <div class="form-group">
+          <span class="form-label">GIS REST API Endpoint (Live WMS)</span>
+          <input type="text" class="form-input" style="font-family:monospace; font-size:9.5px;" value="https://rtsd.gis.mi.th/arcgis/rest/services/FloodPilot/MapServer" readonly>
+        </div>
+        <div class="form-group" style="margin-top:8px; display:flex; flex-direction:column; gap:4px;">
+          <button class="btn btn-primary" onclick="exportGeoJSON()">
+            <span>📥 Export GeoJSON (ArcGIS/QGIS)</span>
+          </button>
+          <button class="btn" onclick="exportShapefileCsv()">
+            <span>📥 Export Coordinates (CSV)</span>
+          </button>
+        </div>
+        <div style="font-size:9.5px; color:var(--tx-muted); margin-top:6px; text-align:center;">
+          *ไฟล์ดาวน์โหลดสามารถอิมพอร์ตเข้า ArcGIS Pro / QGIS ได้ทันที
+        </div>
+      </div>
+
+      <!-- Survey123 Simulation (Closed-Loop Feedback) -->
+      <div class="sb-section" style="border-bottom:none; flex:1; display:flex; flex-direction:column; justify-content:space-between;">
+        <div>
+          <div class="sb-title">
+            <span class="sb-title-icon">📱</span>
+            <span>จำลองการกรอกฟิลด์จริง (Survey123)</span>
+          </div>
+          <div style="font-size:10px; color:var(--tx-muted); margin-bottom:8px; line-height:1.3;">
+            จำลองสถานการณ์เมื่อกำลังพลภาคสนามรายงานระดับน้ำจริงผ่านแอป Survey123 เพื่อจูนความแม่นยำโมเดลล่วงหน้า
+          </div>
+          <div class="form-group">
+            <span class="form-label">เลือกตำบลเป้าหมายลาดตระเวน</span>
+            <select class="form-select" id="survey-tambon">
+              <!-- populated dynamically -->
+            </select>
+          </div>
+          <div class="form-group">
+            <span class="form-label">ระดับน้ำจริงที่ทหารพบบนสนาม</span>
+            <select class="form-select" id="survey-water-level">
+              <option value="99">น้ำท่วมสูงล้นตลิ่ง (> 80 ซม.)</option>
+              <option value="50">น้ำขังตื้นผิวจราจร (30 - 80 ซม.)</option>
+              <option value="10">ไม่มีน้ำท่วม / ปกติ (0 - 10 ซม.)</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" style="margin-top:8px;" onclick="submitSurvey123()">
+            <span>🚀 ส่งรายงานกำลังพล (Submit)</span>
+          </button>
+        </div>
+
+        <!-- Feedback Feed Console -->
+        <div style="margin-top:14px;">
+          <span class="form-label">📡 บันทึกการส่งกลับข้อมูลจากสนาม (Telemetry Feed)</span>
+          <div class="feed-box" id="feed-console">
+            <div class="feed-item">[14:24:02] เริ่มระบบจำลองการสื่อสารวิทยุสนาม...</div>
+            <div class="feed-item">[14:24:05] เชื่อมฐานข้อมูลกลาง ArcGIS Portal สำเร็จ</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- LOAD DATA SCRIPTS -->
+
+  <script>
+    // ══════════════════════════════════════
+    // STATE MANAGEMENT
+    // ══════════════════════════════════════
+    const STATE = {
+      rain_sim: 12.0, // Simulated rainfall in mm/hr
+      water_level: 1400.0, // Combined water level in m3/s (Chao Phraya + Pasak)
+      chao_phraya_discharge: 1150.0, // Chao Phraya Dam release in m3/s
+      pasak_discharge: 250.0, // Pasak Jolasid Dam release in m3/s
+      surveys: [], // Active Survey123 reports
+      active_basemap: 'sat',
+      geojson_layer: null,
+      river_layer: null,
+      stations_layer: null,
+      radar_layer: null,
+      grid_layer: null, // Leaflet GeoJSON layer for 500m grid
+      grid_30m_layer: null, // Leaflet GeoJSON layer for 30m grid
+      roads_layer: null, // Leaflet GeoJSON layer for OSM roads
+      assets_layer: null, // Leaflet LayerGroup for tactical assets
+      gps_marker: null, // GPS marker reference
+      tambon_layers: {}, // Leaflet layer instances keyed by "District_Tambon"
+      survey_markers: [],
+      layers: {
+        tambon: true,
+        rivers: true,
+        stations: true,
+        surveys: true,
+        radar: true,
+        grid_500m: false, // Default off to avoid initial visual clutter
+        grid_30m: false, // Default off to avoid initial visual clutter
+        tactical_assets: true, // Default on to show landmarks
+        roads: false // Default off to keep map clean
+      },
+      min_asset_zoom: 11,
+      asset_category_filter: 'all',
+      time_step_h: 0, // Default to 0h (Present Real-Time Baseline)
+      is_playing_timeline: false,
+      timeline_timer: null,
+      model_comparison_mode: 'ai_sar', // 'ai_sar', 'physical', 'sentinel'
+      routing_start_mode: 'gps', // 'gps' or 'map'
+      routing_start_coords: [14.3532, 100.5684],
+      route_layer: null,
+      route_start_marker: null,
+      road_overrides: {} // cell_id -> boolean
+    };
+
+    function changeModelComparisonMode(mode) {
+      STATE.model_comparison_mode = mode;
+      renderLayers();
+    }
+
+    // ══════════════════════════════════════
+    // PHASE 7: TACTICAL RESCUE ROUTING ENGINE
+    // ══════════════════════════════════════
+    function toggleNavigatorPanel(show) {
+      const panel = document.getElementById('rescue-navigator-overlay');
+      if (!panel) return;
+      if (show === undefined) {
+        panel.style.display = (panel.style.display === 'none' || !panel.style.display) ? 'block' : 'none';
+      } else {
+        panel.style.display = show ? 'block' : 'none';
+      }
+      if (panel.style.display === 'block') {
+        populateRouteTargetOptions();
+      }
+    }
+
+    function populateRouteTargetOptions(searchQuery) {
+      const select = document.getElementById('sel-route-target');
+      if (!select || typeof TACTICAL_ASSETS === 'undefined' || !TACTICAL_ASSETS) return;
+
+      const currentVal = select.value;
+      const startPt = STATE.routing_start_coords || [14.3532, 100.5684];
+      const q = (searchQuery || "").toLowerCase().trim();
+
+      // Calculate distance for every asset
+      const assetsWithDist = TACTICAL_ASSETS.map(asset => {
+        const d = getHaversineDistance(startPt[0], startPt[1], asset.lat, asset.lon);
+        return { ...asset, dist_from_start: d };
+      });
+
+      // Filter by search query if provided
+      let filtered = assetsWithDist;
+      if (q !== "") {
+        filtered = assetsWithDist.filter(a => 
+          (a.name || "").toLowerCase().includes(q) || 
+          (a.tambon || "").toLowerCase().includes(q) ||
+          (a.type || "").toLowerCase().includes(q)
+        );
+      }
+
+      // Separate Hospitals vs Others and sort by distance
+      const hospitals = filtered.filter(a => a.type === 'Hospital').sort((a, b) => a.dist_from_start - b.dist_from_start);
+      const others = filtered.filter(a => a.type !== 'Hospital').sort((a, b) => a.dist_from_start - b.dist_from_start);
+
+      select.innerHTML = '<option value="">-- เลือกสถานที่เป้าหมาย (เรียงจากใกล้ที่สุด) --</option>';
+
+      if (hospitals.length > 0) {
+        const grpHospital = document.createElement('optgroup');
+        grpHospital.label = "🏥 โรงพยาบาล & โรงพยาบาลส่งเสริมสุขภาพตำบล (เรียงจากใกล้สุด)";
+        hospitals.forEach(asset => {
+          const opt = document.createElement('option');
+          opt.value = asset.id;
+          opt.textContent = `🏥 ${asset.name} (ต.${asset.tambon} - ห่าง ${asset.dist_from_start.toFixed(1)} กม.)`;
+          grpHospital.appendChild(opt);
+        });
+        select.appendChild(grpHospital);
+      }
+
+      if (others.length > 0) {
+        const grpOthers = document.createElement('optgroup');
+        grpOthers.label = "🏫 ศูนย์อพยพโรงเรียน / วัด / อบต. (เรียงจากใกล้สุด)";
+        others.forEach(asset => {
+          let typeIcon = '🏛️';
+          if (asset.type === 'School') typeIcon = '🏫';
+          else if (asset.type === 'Temple') typeIcon = '🛕';
+          
+          const opt = document.createElement('option');
+          opt.value = asset.id;
+          opt.textContent = `${typeIcon} ${asset.name} (ต.${asset.tambon} - ห่าง ${asset.dist_from_start.toFixed(1)} กม.)`;
+          grpOthers.appendChild(opt);
+        });
+        select.appendChild(grpOthers);
+      }
+
+      if (q !== "" && (hospitals.length > 0 || others.length > 0)) {
+        const topAsset = hospitals.length > 0 ? hospitals[0] : others[0];
+        select.value = topAsset.id;
+      } else if (currentVal) {
+        select.value = currentVal;
+      }
+    }
+
+    function onRouteTargetSelected(assetId) {
+      if (!assetId) return;
+      const asset = TACTICAL_ASSETS.find(a => a.id.toString() === assetId.toString());
+      if (!asset) return;
+
+      const select = document.getElementById('sel-route-target');
+      if (select) select.value = asset.id;
+
+      // Ensure panel is open
+      toggleNavigatorPanel(true);
+
+      // Automatically calculate and draw rescue route immediately
+      calculateRescueRoute();
+    }
+
+    function handleMapClickForRouting(e) {
+      if (STATE.routing_start_mode !== 'map') return;
+      STATE.routing_start_coords = [e.latlng.lat, e.latlng.lng];
+      updateRoutingStartMarker();
+      
+      const select = document.getElementById('sel-route-target');
+      const savedTargetVal = select ? select.value : null;
+
+      populateRouteTargetOptions();
+      
+      if (select && savedTargetVal) {
+        select.value = savedTargetVal;
+        calculateRescueRoute();
+      } else {
+        alert("📍 ตั้งจุดเริ่มต้นสำเร็จ! โปรดเลือกสถานที่เป้าหมาย (เช่น โรงพยาบาล) ในเมนูด้านบน เพื่อให้ระบบสร้างเส้นทางให้อัตโนมัติ");
+      }
+    }
+
+    function setRoutingStartMode(mode) {
+      STATE.routing_start_mode = mode;
+      const btnGps = document.getElementById('btn-route-gps');
+      const btnMap = document.getElementById('btn-route-click');
+      const mapContainer = document.getElementById('map');
+
+      // Unbind previous map click listener
+      map.off('click', handleMapClickForRouting);
+      
+      if (mode === 'gps') {
+        if (btnGps) btnGps.className = 'asset-btn active';
+        if (btnMap) btnMap.className = 'asset-btn';
+        if (mapContainer) mapContainer.style.cursor = '';
+        
+        const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+        if (!isSecure) {
+          const httpsUrl = `https://${window.location.hostname}:8443`;
+          if (confirm(`⚠️ การใช้ GPS ฮาร์ดแวร์บน iPad / มือถือ / เครื่องอื่นผ่าน LAN:\n\nเบราว์เซอร์จะบล็อก Geolocation บน HTTP (http://...)\n\n👉 ท่านต้องการสลับเปิดผ่านลิงก์ HTTPS 🔒 เพื่อใช้ GPS ฮาร์ดแวร์ทันทีหรือไม่?\n(${httpsUrl})`)) {
+            window.location.href = httpsUrl;
+            return;
+          } else {
+            alert("📍 สลับเข้าสู่โหมด 'คลิกพิกัดบนแผนที่' ให้ท่านอัตโนมัติ เพื่อให้ระบุตำแหน่งนำทางกู้ภัยได้สะดวก");
+            setRoutingStartMode('map');
+            return;
+          }
+        }
+
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            pos => {
+              STATE.routing_start_coords = [pos.coords.latitude, pos.coords.longitude];
+              updateRoutingStartMarker();
+              populateRouteTargetOptions();
+              alert(`🎯 ดึงพิกัด GPS สำเร็จ: ${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`);
+            },
+            err => {
+              STATE.routing_start_coords = [14.3532, 100.5684]; // Default Ayutthaya City Center
+              updateRoutingStartMarker();
+              populateRouteTargetOptions();
+              alert("⚠️ ไม่สามารถขอรับสิทธิ์พิกัด GPS ได้ ระบบสลับเข้าสู่โหมดคลิกพิกัดบนแผนที่ให้อัตโนมัติ");
+              setRoutingStartMode('map');
+            },
+            { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+          );
+        } else {
+          STATE.routing_start_coords = [14.3532, 100.5684];
+          updateRoutingStartMarker();
+          populateRouteTargetOptions();
+          setRoutingStartMode('map');
+        }
+      } else {
+        if (btnGps) btnGps.className = 'asset-btn';
+        if (btnMap) btnMap.className = 'asset-btn active';
+        if (mapContainer) mapContainer.style.cursor = 'crosshair';
+
+        // Bind persistent map click listener
+        map.on('click', handleMapClickForRouting);
+        alert("📍 เปิดโหมดคลิกแผนที่: โปรดแตะ/คลิกตำแหน่งใดก็ได้บนแผนที่เพื่อกำหนดจุดตั้งต้น");
+      }
+    }
+
+    function updateRoutingStartMarker() {
+      if (STATE.route_start_marker) map.removeLayer(STATE.route_start_marker);
+      const iconHtml = `<div style="background:#10b981; width:22px; height:22px; border-radius:50%; border:2px solid #fff; display:flex; align-items:center; justify-content:center; font-size:11px; color:#fff; font-weight:bold; box-shadow:0 0 10px rgba(16,185,129,0.9);">📍</div>`;
+      const customIcon = L.divIcon({ html: iconHtml, className: 'start-marker-icon', iconSize: [22, 22], iconAnchor: [11, 11] });
+      STATE.route_start_marker = L.marker(STATE.routing_start_coords, { icon: customIcon }).addTo(map).bindPopup(`<b>📍 จุดตั้งต้นการเดินทางกู้ภัย</b><br>พิกัด: ${STATE.routing_start_coords[0].toFixed(4)}, ${STATE.routing_start_coords[1].toFixed(4)}`).openPopup();
+    }
+
+    function toggleRoadOverride(cellId) {
+      if (STATE.road_overrides[cellId] === undefined) {
+        STATE.road_overrides[cellId] = true; // Force flooded
+      } else {
+        STATE.road_overrides[cellId] = !STATE.road_overrides[cellId];
+      }
+      renderLayers();
+      const statusText = STATE.road_overrides[cellId] ? '🚨 ท่วมขัง (Force Flooded)' : '🟢 แห้งสัญจรได้ (Force Dry)';
+      alert(`🔄 ปรับ Override สถานะถนนพิกัด cell_id #${cellId} เป็น: ${statusText}`);
+    }
+
+    function calculateRescueRoute() {
+      const banner = document.getElementById('route-output-banner');
+      let targetId = document.getElementById('sel-route-target')?.value;
+      
+      if (!targetId) {
+        const select = document.getElementById('sel-route-target');
+        if (select && select.options.length > 1) {
+          for (let i = 0; i < select.options.length; i++) {
+            if (select.options[i].value) {
+              targetId = select.options[i].value;
+              select.value = targetId;
+              break;
+            }
+          }
+        }
+      }
+
+      if (!targetId) {
+        alert("⚠️ โปรดเลือกสถานที่ยุทธศาสตร์เป้าหมาย (เช่น โรงพยาบาลบางบาล) ก่อนทำการคำนวณ");
+        return;
+      }
+
+      const targetAsset = TACTICAL_ASSETS.find(a => a.id.toString() === targetId.toString());
+      if (!targetAsset) return;
+
+      if (!STATE.routing_start_coords) {
+        STATE.routing_start_coords = [14.3532, 100.5684];
+      }
+      updateRoutingStartMarker();
+
+      if (typeof AYUTTHAYA_ROADS === 'undefined' || !AYUTTHAYA_ROADS) {
+        alert("⚠️ ไม่พบข้อมูลโครงข่ายถนนกู้ภัยในระบบ");
+        return;
+      }
+
+      const startPt = STATE.routing_start_coords;
+      const targetPt = [targetAsset.lat, targetAsset.lon];
+      const startLat = startPt[0], startLon = startPt[1];
+      const targetLat = targetPt[0], targetLon = targetPt[1];
+
+
+
+      let safeSegments = [];
+      let blockedCount = 0;
+
+      AYUTTHAYA_ROADS.features.forEach(f => {
+        const cellId = f.properties.cell_id;
+        const depth = (cellId !== -1 && STATE.current_grid_depths && STATE.current_grid_depths[cellId] !== undefined)
+          ? STATE.current_grid_depths[cellId] : 0.0;
+        
+        let isFlooded = depth > 0.25;
+        if (STATE.road_overrides[cellId] !== undefined) {
+          isFlooded = STATE.road_overrides[cellId];
+        }
+
+        if (isFlooded) {
+          blockedCount++;
+        } else {
+          safeSegments.push(f);
+        }
+      });
+
+      // If safeSegments is sparse, use all available features sorted by depth
+      const activeSegments = safeSegments.length > 10 ? safeSegments : AYUTTHAYA_ROADS.features;
+
+      // Sort road segments along path between Start -> Target
+      const sortedSegments = activeSegments.slice().sort((a, b) => {
+        const cA = a.geometry.coordinates;
+        const midA = cA[Math.floor(cA.length / 2)];
+        const dA = getHaversineDistance(startLat, startLon, midA[1], midA[0]) + getHaversineDistance(targetLat, targetLon, midA[1], midA[0]);
+        
+        const cB = b.geometry.coordinates;
+        const midB = cB[Math.floor(cB.length / 2)];
+        const dB = getHaversineDistance(startLat, startLon, midB[1], midB[0]) + getHaversineDistance(targetLat, targetLon, midB[1], midB[0]);
+
+        const hwA = ['primary', 'trunk', 'motorway'].includes(a.properties.highway) ? 0.75 : 1.0;
+        const hwB = ['primary', 'trunk', 'motorway'].includes(b.properties.highway) ? 0.75 : 1.0;
+
+        return (dA * hwA) - (dB * hwB);
+      });
+
+      const routeSegments1 = sortedSegments.slice(0, Math.min(sortedSegments.length, 30));
+      const routeSegments2 = sortedSegments.slice(Math.min(4, sortedSegments.length), Math.min(sortedSegments.length, 35));
+
+      const buildRoutePolyline = (segments) => {
+        let curr = [startLat, startLon];
+        const routePoints = [curr];
+        const unused = segments.slice();
+
+        while (unused.length > 0 && routePoints.length < 80) {
+          let bestIdx = -1;
+          let minD = Infinity;
+          let bestOrder = null;
+
+          for (let i = 0; i < unused.length; i++) {
+            const coords = unused[i].geometry.coordinates;
+            const ptA = [coords[0][1], coords[0][0]];
+            const ptB = [coords[coords.length - 1][1], coords[coords.length - 1][0]];
+            const dA = getHaversineDistance(curr[0], curr[1], ptA[0], ptA[1]);
+            const dB = getHaversineDistance(curr[0], curr[1], ptB[0], ptB[1]);
+            const dMin = Math.min(dA, dB);
+
+            if (dMin < minD) {
+              minD = dMin;
+              bestIdx = i;
+              bestOrder = dA <= dB ? coords.map(c => [c[1], c[0]]) : coords.slice().reverse().map(c => [c[1], c[0]]);
+            }
+          }
+
+          if (bestIdx !== -1 && minD < 5000.0) {
+            bestOrder.forEach(pt => routePoints.push(pt));
+            curr = routePoints[routePoints.length - 1];
+            unused.splice(bestIdx, 1);
+          } else {
+            break;
+          }
+        }
+
+        routePoints.push([targetLat, targetLon]);
+        return routePoints;
+      };
+
+      const directDist = getHaversineDistance(startLat, startLon, targetLat, targetLon);
+      const coordsR1 = buildRoutePolyline(routeSegments1);
+      const coordsR2 = buildRoutePolyline(routeSegments2);
+
+      // Populate Google Maps Top Card & Bottom Drawer
+      const destNameEl = document.getElementById('gmaps-dest-name');
+      if (destNameEl) destNameEl.textContent = targetAsset.name;
+
+      const totalDist = (directDist * 1.25).toFixed(1);
+      const estMins = Math.max(3, Math.round((totalDist / 35.0) * 60));
+
+      const etaTimeEl = document.getElementById('gmaps-eta-time');
+      if (etaTimeEl) etaTimeEl.textContent = `${estMins} นาที`;
+      
+      const tabTimeEl = document.getElementById('drawer-tab-time');
+      if (tabTimeEl) tabTimeEl.textContent = `${estMins} นาที`;
+
+      const etaDistEl = document.getElementById('gmaps-eta-dist');
+      if (etaDistEl) etaDistEl.textContent = `${totalDist} กม.`;
+
+      const now = new Date();
+      now.setMinutes(now.getMinutes() + estMins);
+      const arrivalTimeStr = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+      
+      const etaClockEl = document.getElementById('gmaps-eta-clock');
+      if (etaClockEl) etaClockEl.textContent = arrivalTimeStr;
+
+      // Show Google Maps Overview UI Cards
+      const topCard = document.getElementById('gmaps-top-card');
+      const bottomDrawer = document.getElementById('gmaps-bottom-drawer');
+      if (topCard) topCard.style.display = 'block';
+      if (bottomDrawer) bottomDrawer.style.display = 'block';
+
+      // Hide small rescue overlay panel
+      const oldOverlay = document.getElementById('rescue-navigator-overlay');
+      if (oldOverlay) oldOverlay.style.display = 'none';
+
+      // Render Google Maps Solid Blue/Purple Polyline with ETA Floating Badge
+      if (STATE.route_layer) map.removeLayer(STATE.route_layer);
+
+      const mainBlueLine = L.polyline(coordsR1, {
+        color: '#2563eb',
+        weight: 8,
+        opacity: 0.95,
+        lineCap: 'round',
+        lineJoin: 'round'
+      });
+
+      const glowBlueLine = L.polyline(coordsR1, {
+        color: '#3b82f6',
+        weight: 14,
+        opacity: 0.45
+      });
+
+      // Floating ETA Badge Marker in center of route
+      const midIdx = Math.floor(coordsR1.length / 2);
+      const midPt = coordsR1[midIdx] || [targetLat, targetLon];
+
+      const etaBadgeIcon = L.divIcon({
+        html: `<div class="gmaps-eta-badge">${estMins} นาที 🍃</div>`,
+        className: 'gmaps-eta-badge-container',
+        iconAnchor: [35, 15]
+      });
+      const etaMarker = L.marker(midPt, { icon: etaBadgeIcon });
+
+      STATE.route_layer = L.layerGroup([glowBlueLine, mainBlueLine, etaMarker]).addTo(map);
+
+      const bounds = mainBlueLine.getBounds();
+      if (bounds.isValid()) {
+        map.fitBounds(bounds, { animate: false, padding: [60, 60] });
+      }
+
+      // Re-enable Leaflet touch & drag controls
+      if (map.dragging) map.dragging.enable();
+      if (map.touchZoom) map.touchZoom.enable();
+      if (map.doubleClickZoom) map.doubleClickZoom.enable();
+      if (map.scrollWheelZoom) map.scrollWheelZoom.enable();
+    }
+
+    window.startActiveTurnByTurnNav = function() {
+      const topCard = document.getElementById('gmaps-top-card');
+      const bottomDrawer = document.getElementById('gmaps-bottom-drawer');
+      if (topCard) topCard.style.display = 'none';
+      if (bottomDrawer) bottomDrawer.style.display = 'none';
+
+      const hudTop = document.getElementById('gmaps-active-hud-top');
+      const hudBottom = document.getElementById('gmaps-active-hud-bottom');
+      if (hudTop) hudTop.style.display = 'block';
+      if (hudBottom) hudBottom.style.display = 'flex';
+
+      const destName = document.getElementById('gmaps-dest-name')?.textContent || 'จุดหมาย';
+      const turnTitle = document.getElementById('hud-turn-title');
+      const turnSub = document.getElementById('hud-turn-sub');
+      if (turnTitle) turnTitle.textContent = `มุ่งหน้าไปยัง ${destName}`;
+      if (turnSub) turnSub.textContent = `หลีกเลี่ยงพื้นที่น้ำท่วม • ใช้ทางหลวงอยุธยา`;
+
+      const etaTime = document.getElementById('gmaps-eta-time')?.textContent || '20 นาที';
+      const etaDist = document.getElementById('gmaps-eta-dist')?.textContent || '9.3 กม.';
+      const etaClock = document.getElementById('gmaps-eta-clock')?.textContent || '13:25';
+
+      const activeEtaTime = document.getElementById('hud-active-eta-time');
+      const activeDist = document.getElementById('hud-active-dist');
+      const activeClock = document.getElementById('hud-active-clock');
+      if (activeEtaTime) activeEtaTime.textContent = etaTime;
+      if (activeDist) activeDist.textContent = etaDist;
+      if (activeClock) activeClock.textContent = etaClock;
+    };
+
+    window.exitActiveTurnByTurnNav = function() {
+      const hudTop = document.getElementById('gmaps-active-hud-top');
+      const hudBottom = document.getElementById('gmaps-active-hud-bottom');
+      if (hudTop) hudTop.style.display = 'none';
+      if (hudBottom) hudBottom.style.display = 'none';
+
+      const topCard = document.getElementById('gmaps-top-card');
+      const bottomDrawer = document.getElementById('gmaps-bottom-drawer');
+      if (topCard) topCard.style.display = 'block';
+      if (bottomDrawer) bottomDrawer.style.display = 'block';
+    };
+
+    window.clearRescueRoute = function() {
+      if (STATE.route_layer) {
+        map.removeLayer(STATE.route_layer);
+        STATE.route_layer = null;
+      }
+      if (STATE.route_start_marker) {
+        map.removeLayer(STATE.route_start_marker);
+        STATE.route_start_marker = null;
+      }
+      const topCard = document.getElementById('gmaps-top-card');
+      const bottomDrawer = document.getElementById('gmaps-bottom-drawer');
+      const hudTop = document.getElementById('gmaps-active-hud-top');
+      const hudBottom = document.getElementById('gmaps-active-hud-bottom');
+      const banner = document.getElementById('route-output-banner');
+      if (topCard) topCard.style.display = 'none';
+      if (bottomDrawer) bottomDrawer.style.display = 'none';
+      if (hudTop) hudTop.style.display = 'none';
+      if (hudBottom) hudBottom.style.display = 'none';
+      if (banner) banner.style.display = 'none';
+    };
+
+    function getHaversineDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371; // km
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    }
+
+    function toggleLayerControlCollapse() {
+      const body = document.getElementById('lc-body-container');
+      const btn = document.getElementById('btn-lc-collapse');
+      if (!body) return;
+      if (body.style.display === 'none') {
+        body.style.display = 'block';
+        if (btn) btn.innerHTML = '▼ ย่อ';
+      } else {
+        body.style.display = 'none';
+        if (btn) btn.innerHTML = '▲ ขยาย';
+      }
+    }
+
+    function toggleLeftSidebar() {
+      const sidebar = document.getElementById('left-sidebar');
+      const icon = document.getElementById('left-toggle-icon');
+      if (!sidebar) return;
+      
+      if (sidebar.classList.contains('collapsed') || sidebar.style.display === 'none') {
+        sidebar.classList.remove('collapsed');
+        sidebar.style.display = 'block';
+        if (icon) icon.innerHTML = '◀';
+      } else {
+        sidebar.classList.add('collapsed');
+        sidebar.style.display = 'none';
+        if (icon) icon.innerHTML = '▶';
+      }
+      setTimeout(() => map.invalidateSize(), 300);
+    }
+
+    function toggleTimelinePlay() {
+      const btn = document.getElementById('tp-play-btn');
+      if (STATE.is_playing_timeline) {
+        STATE.is_playing_timeline = false;
+        if (STATE.timeline_timer) clearInterval(STATE.timeline_timer);
+        if (btn) btn.innerHTML = '▶ เล่น';
+      } else {
+        STATE.is_playing_timeline = true;
+        if (btn) btn.innerHTML = '⏸ หยุด';
+        STATE.timeline_timer = setInterval(() => {
+          let nextVal = STATE.time_step_h + 3;
+          if (nextVal > 24) nextVal = 0;
+          setTimelineStep(nextVal);
+        }, 1800);
+      }
+    }
+
+    function stepTimeline(dir) {
+      let nextVal = STATE.time_step_h + (dir * 3);
+      if (nextVal > 24) nextVal = 0;
+      if (nextVal < 0) nextVal = 24;
+      setTimelineStep(nextVal);
+    }
+
+    function onTimelineSliderChange(val) {
+      setTimelineStep(parseInt(val, 10));
+    }
+
+    function setTimelineStep(val) {
+      STATE.time_step_h = val;
+      const slider = document.getElementById('tp-slider');
+      const badge = document.getElementById('tp-badge');
+      if (slider) slider.value = val;
+      if (badge) {
+        let label = `T+${val}h`;
+        if (val === 0) label += ' (ปัจจุบัน)';
+        else if (val === 6) label += ' (บ่ายวันนี้)';
+        else if (val === 12) label += ' (ค่ำวันนี้)';
+        else if (val === 24) label += ' (พรุ่งนี้)';
+        badge.innerText = label;
+      }
+      renderLayers();
+    }
+
+    const TELEMETRY_STATIONS = [
+      { id: 'C35', name: 'สถานี C.35 บางปะอิน', lat: 14.230, lon: 100.575, desc: 'จุดเฝ้าระวังหลัก อ.บางปะอิน (หน้าพระราชวังบางปะอิน)' },
+      { id: 'C3', name: 'สถานี C.3 วัดเสนาสนาราม', lat: 14.362, lon: 100.564, desc: 'จุดเฝ้าระวัง อ.พระนครศรีอยุธยา' }
+    ];
+
+    // TACTICAL_ASSETS is loaded dynamically from ayutthaya_tactical_assets.js
+
+    function getDistrictFromAsset(asset) {
+      return asset.district || "Phra Nakhon Si Ayutthaya";
+    }
+
+    function calculateAssetFloodDepth(asset) {
+      const dName = getDistrictFromAsset(asset);
+      let discharge = STATE.water_level;
+      
+      const cpDistricts = ["Phak Hai", "Sena", "Bang Ban", "Bang Sai", "Bang Pa-in", "Lat Bua Luang", "Bang Sai (14.2)"];
+      const pasakDistricts = ["Tha Luang", "Tha Rua", "Nakhon Luang", "Phra Nakhon Si Ayutthaya", "Ban Phraek", "Maha Rat", "Phachi"];
+      
+      if (cpDistricts.includes(dName)) {
+        discharge = STATE.chao_phraya_discharge + (STATE.rain_sim * 4);
+      } else if (pasakDistricts.includes(dName)) {
+        discharge = (STATE.pasak_discharge * 2.2) + (STATE.rain_sim * 4);
+      } else {
+        discharge = STATE.chao_phraya_discharge + STATE.pasak_discharge + (STATE.rain_sim * 8);
+      }
+      
+      let hWater = 2.0;
+      if (discharge <= 500) hWater = 2.0 + (discharge / 500.0) * 0.8;
+      else if (discharge <= 1000) hWater = 2.8 + ((discharge - 500.0) / 500.0) * 1.0;
+      else if (discharge <= 1500) hWater = 3.8 + ((discharge - 1000.0) / 500.0) * 1.0;
+      else if (discharge <= 2200) hWater = 4.8 + ((discharge - 1500.0) / 700.0) * 0.8;
+      else if (discharge <= 3000) hWater = 5.6 + ((discharge - 2200.0) / 800.0) * 0.6;
+      else hWater = 6.2 + ((discharge - 3000.0) / 1000.0) * 0.4;
+      
+      const distKm = asset.dist_km;
+      let hLocal = hWater;
+      
+      let decay_coef = 0.05;
+      let min_stage_coef = 1.50;
+      if (typeof AYUTTHAYA_CALIBRATION_COEF !== 'undefined' && AYUTTHAYA_CALIBRATION_COEF) {
+        decay_coef = AYUTTHAYA_CALIBRATION_COEF.decay;
+        min_stage_coef = AYUTTHAYA_CALIBRATION_COEF.min_stage;
+      }
+      
+      if (distKm > 1.0) {
+        hLocal = hWater - decay_coef * (distKm - 1.0);
+      }
+      hLocal = Math.max(hLocal, min_stage_coef);
+      
+      let depth = hLocal - asset.elevation;
+      
+      // Apply 4D Timeline Spatiotemporal Propagation Factor
+      if (STATE.time_step_h < 24) {
+        const timeTravelLimit = STATE.time_step_h * 0.15; // km water progressed
+        if (distKm > timeTravelLimit + 0.5) {
+          depth = 0;
+        } else if (distKm > timeTravelLimit) {
+          const propFactor = (timeTravelLimit + 0.5 - distKm) / 0.5;
+          depth = depth * Math.max(0, propFactor);
+        }
+      }
+      
+      if (depth < 0.05) depth = 0;
+      return depth;
+    }
+
+    // ══════════════════════════════════════
+    // MAP SETUP & BASEMAPS
+    // ══════════════════════════════════════
+    const map = L.map('map', {
+      zoomControl: true,
+      attributionControl: true
+    }).setView([14.35, 100.57], 10);
+
+    const satImagery = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      attribution: '&copy; Esri World Imagery'
+    });
+    const satLabels = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+      attribution: '&copy; Esri Boundaries and Places'
+    });
+
+    const basemaps = {
+      sat: L.layerGroup([satImagery, satLabels]),
+      topo: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
+        attribution: '&copy; Esri World Topographic Map (RTSD Tactical Scale)'
+      })
+    };
+
+    // Set initial basemap (Imagery Hybrid is default)
+    basemaps.sat.addTo(map);
+
+    function changeBasemap(type) {
+      STATE.active_basemap = type;
+      // remove all basemaps
+      Object.values(basemaps).forEach(l => map.removeLayer(l));
+      // add chosen basemap
+      basemaps[type].addTo(map);
+
+      // update UI active classes
+      document.querySelectorAll('.bmap-btn').forEach(btn => btn.classList.remove('active'));
+      if (type === 'sat') document.getElementById('btn-satellite').classList.add('active');
+      if (type === 'topo') document.getElementById('btn-topo').classList.add('active');
+    }
+
+    function setAssetCategoryFilter(category) {
+      STATE.asset_category_filter = category;
+      ['all', 'School', 'Hospital', 'Temple', 'Government'].forEach(c => {
+        const btn = document.getElementById(`af-${c}`);
+        if (btn) {
+          if (c === category) btn.classList.add('active');
+          else btn.classList.remove('active');
+        }
+      });
+      renderLayers();
+    }
+
+    function updateAssetsZoomVisibility() {
+      const currentZoom = map.getZoom();
+      const noticeEl = document.getElementById('asset-zoom-notice');
+      
+      if (STATE.layers.tactical_assets) {
+        if (currentZoom < STATE.min_asset_zoom) {
+          if (STATE.assets_layer && map.hasLayer(STATE.assets_layer)) {
+            map.removeLayer(STATE.assets_layer);
+          }
+          if (noticeEl) {
+            noticeEl.innerHTML = `<span style="color:#f59e0b; font-weight:600;">⚠️ ซ่อนหมุดอัตโนมัติ (ซูม ${currentZoom} < 11 เพื่อลดความแออัด)</span>`;
+          }
+        } else {
+          if (STATE.assets_layer && !map.hasLayer(STATE.assets_layer)) {
+            STATE.assets_layer.addTo(map);
+          }
+          if (noticeEl) {
+            noticeEl.innerHTML = `<span style="color:#34d399; font-weight:600;">🟢 แสดงหมุดยุทธศาสตร์ (ซูม ${currentZoom} >= 11)</span>`;
+          }
+        }
+      } else {
+        if (noticeEl) noticeEl.innerHTML = '';
+      }
+    }
+
+    function toggleCalibrationPanel(show) {
+      const panel = document.getElementById('calibration-panel-overlay');
+      const chk = document.getElementById('chk-calibration_panel');
+      if (!panel) return;
+      
+      let shouldShow = show;
+      if (shouldShow === undefined) {
+        shouldShow = (panel.style.display === 'none');
+      }
+      
+      if (shouldShow) {
+        panel.style.display = 'block';
+        if (chk) chk.checked = true;
+      } else {
+        panel.style.display = 'none';
+        if (chk) chk.checked = false;
+      }
+    }
+
+    map.on('zoomend', updateAssetsZoomVisibility);
+
+    // ══════════════════════════════════════
+    // RISK ENGINE (PILOT POC)
+    // ══════════════════════════════════════
+    // Calculates a dynamic risk score between 0 and 99 for a subdistrict
+    function calculateSubdistrictRisk(props, propertiesToCheck = {}) {
+      const dName = props.NAME_2;
+      const sdName = props.NAME_3;
+      const key = `${dName}_${sdName}`;
+
+      // Check if there is an active Survey123 report for this subdistrict (Ground-truth locks/calibrates it)
+      const matchedSurvey = STATE.surveys.find(s => s.tambonKey === key);
+      if (matchedSurvey) {
+        const score = matchedSurvey.level;
+        props.flood_depth = score >= 40 ? (score - 40) / 40.0 : 0;
+        return score; // Hard calibration locked directly by physical report
+      }
+
+      // --- PHYSICAL HYDROSTATIC ELEVATION INUNDATION MODEL ---
+      
+      // 1. Calculate physical water level at the rivers (H_water in meters MSL)
+      // We route the water level according to the specific river basins affecting each district
+      const cpDistricts = ["Phak Hai", "Sena", "Bang Ban", "Bang Sai", "Bang Pa-in"];
+      const pasakDistricts = ["Tha Luang", "Tha Rua", "Nakhon Luang", "Phra Nakhon Si Ayutthaya", "Ban Phraek", "Maha Rat"];
+      
+      const district = props.NAME_2;
+      let discharge = STATE.water_level;
+      
+      if (cpDistricts.includes(district)) {
+        // West/Chao Phraya zone: affected by Chao Phraya Dam release + local rain
+        discharge = STATE.chao_phraya_discharge + (STATE.rain_sim * 4);
+      } else if (pasakDistricts.includes(district)) {
+        // East/Pasak zone: affected by Pasak Dam release + local rain
+        // Scale factor 2.2 maps Pasak channel capacity to Chao Phraya rating curve scale
+        discharge = (STATE.pasak_discharge * 2.2) + (STATE.rain_sim * 4);
+      } else {
+        // Mixed/Confluence zone: affected by both
+        discharge = STATE.chao_phraya_discharge + STATE.pasak_discharge + (STATE.rain_sim * 8);
+      }
+      
+      let hWater = 2.0;
+      if (discharge <= 500) {
+        hWater = 2.0 + (discharge / 500.0) * 0.8; // 2.0 to 2.8m MSL
+      } else if (discharge <= 1000) {
+        hWater = 2.8 + ((discharge - 500.0) / 500.0) * 1.0; // 2.8 to 3.8m MSL
+      } else if (discharge <= 1500) {
+        hWater = 3.8 + ((discharge - 1000.0) / 500.0) * 1.0; // 3.8 to 4.8m MSL (Bankfull capacity of main channels)
+      } else if (discharge <= 2200) {
+        hWater = 4.8 + ((discharge - 1500.0) / 700.0) * 0.8; // 4.8 to 5.6m MSL (Over bankfull flow, inundating low plains)
+      } else if (discharge <= 3000) {
+        hWater = 5.6 + ((discharge - 2200.0) / 800.0) * 0.6; // 5.6 to 6.2m MSL (Severe flooding)
+      } else {
+        hWater = 6.2 + ((discharge - 3000.0) / 1000.0) * 0.4; // >6.2m MSL (Extreme historical flood level)
+      }
+
+      // 2. Adjust local water level based on distance-decay from river bed (Hydraulic Slope Decay)
+      const distRiver = props.distance_to_river_km || 1.0;
+      let hLocal = hWater;
+      if (distRiver > 1.0) {
+        // Water surface drops by 0.15m per kilometer away from river due to friction/overland spread
+        hLocal = hWater - 0.15 * (distRiver - 1.0);
+      }
+      hLocal = Math.max(hLocal, 2.0); // Never drops below dry-season baseline
+
+      // 3. Compare local water head with subdistrict mean elevation (m MSL)
+      const elev = props.mean_elevation_m || 4.0;
+      let floodDepth = hLocal - elev; // Depth in meters
+
+      // 4. Adjust flood depth based on terrain slope (water drains faster on steep slopes)
+      const slope = props.slope_degrees || 0.5;
+      if (floodDepth > 0) {
+        // Exponential decay based on slope
+        floodDepth = floodDepth * Math.exp(-0.25 * Math.max(slope - 0.5, 0));
+      }
+
+      // 5. Add rainfall-induced local water pooling (น้ำขังรอระบาย)
+      const rain = STATE.rain_sim; // 0 to 60 mm/hr
+      let rainPooling = 0;
+      if (rain > 0) {
+        // Up to 30cm of rainfall pooling on perfectly flat land with heavy rain (60mm/hr)
+        rainPooling = (rain / 60.0) * 0.30 * Math.exp(-0.5 * slope);
+      }
+
+      // Combined physical depth
+      let totalDepth = Math.max(floodDepth, rainPooling);
+      
+      // Apply 4D Timeline Spatiotemporal Inland Flood Spread Factor
+      // Riverfront zones (distRiver <= 1.2km) maintain continuous hydrostatic risk baseline at T=0h
+      // Inland expansion expands from 1.2km to 7.2km over T+0h to T+24h
+      const inlandReachKm = 1.2 + (STATE.time_step_h * 0.25);
+      if (distRiver > inlandReachKm + 1.0) {
+        totalDepth = 0; // Water hasn't reached inland depth yet at time T
+      } else if (distRiver > inlandReachKm) {
+        const propFactor = (inlandReachKm + 1.0 - distRiver) / 1.0;
+        totalDepth = totalDepth * Math.max(0.3, propFactor);
+      }
+      
+      props.flood_depth = totalDepth > 0.05 ? totalDepth : 0.0; // Hide sub-5cm ripples to avoid noise
+
+      // 6. Map physical depth to risk score (10 - 99 scale)
+      let finalScore = 10;
+      if (props.flood_depth > 0) {
+        // Flooded! Map 0m to 1.5m depth linearly to score 40 to 99
+        finalScore = 40 + Math.min(Math.round(props.flood_depth * 40.0), 59);
+      } else {
+        // Safe! Score is proportional to closeness to flooding (freeboard)
+        const freeboard = elev - hLocal; // How many meters safe we are
+        finalScore = Math.max(10, Math.round(39 - Math.min(freeboard * 10.0, 29)));
+      }
+
+      return Math.max(Math.min(finalScore, 99), 10);
+    }
+
+    function getRiskColor(score) {
+      if (score >= 80) return 'var(--r-crit)';
+      if (score >= 60) return 'var(--r-high)';
+      if (score >= 40) return 'var(--r-mid)';
+      return 'var(--r-low)';
+    }
+
+    function getRiskLabel(score) {
+      if (score >= 80) return 'วิกฤต (ล้นท่วม)';
+      if (score >= 60) return 'เสี่ยงสูง (จ่อเอ่อ)';
+      if (score >= 40) return 'ปานกลาง (ขังตื้น)';
+      return 'ปลอดภัย (ปกติ)';
+    }
+
+    window.toggleSopItem = function(checkbox, key, taskName, taskId) {
+      if (!STATE.sop_completed) STATE.sop_completed = {};
+      if (!STATE.sop_completed[key]) STATE.sop_completed[key] = {};
+      STATE.sop_completed[key][taskId] = checkbox.checked;
+      
+      const parts = key.split('_');
+      const dName = parts[0];
+      const sdName = parts[1];
+      const trans = AYUTTHAYA_TRANSLATION_MAP[key] || { tambon_th: sdName, amphoe_th: dName };
+      const displayName = `ต. ${trans.tambon_th} (อ. ${trans.amphoe_th})`;
+      
+      const consoleEl = document.getElementById('feed-console');
+      if (consoleEl) {
+        const timeStr = new Date().toLocaleTimeString();
+        const logItem = document.createElement('div');
+        logItem.className = 'feed-item';
+        logItem.style.color = checkbox.checked ? '#4ade80' : '#fb923c';
+        logItem.innerHTML = `[${timeStr}] 🎖️ SOP สำเร็จ: ${checkbox.checked ? 'ดำเนินการ' : 'ยกเลิก'} "${taskName}" (${displayName})`;
+        consoleEl.prepend(logItem);
+      }
+    };
+
+    function getMilitarySOP(score, districtName, subdistrictName) {
+      const key = `${districtName}_${subdistrictName}`;
+      if (!STATE.sop_completed) STATE.sop_completed = {};
+      if (!STATE.sop_completed[key]) {
+        STATE.sop_completed[key] = {};
+        if (score >= 80) {
+          STATE.sop_completed[key]['task1'] = true; // ประกาศเขตอพยพ
+          STATE.sop_completed[key]['task2'] = true; // เตรียมเรือท้องแบน
+          STATE.sop_completed[key]['task3'] = false; // ตั้งจุดรับบำรุง
+        } else if (score >= 50) {
+          STATE.sop_completed[key]['task1'] = true; // แจ้งเตือนชาวบ้าน
+          STATE.sop_completed[key]['task2'] = false; // เสริมแนวกระสอบทราย
+          STATE.sop_completed[key]['task3'] = false; // ลาดตระเวน
+        }
+      }
+      
+      const completed = STATE.sop_completed[key];
+      
+      if (score >= 80) {
+        return `
+          <div style="margin-top:8px; padding-top:8px; border-top:1px dashed rgba(255,255,255,0.15);">
+            <div style="font-weight:bold; font-size:10px; color:#f87171; margin-bottom:4px;">🔴 แผนเผชิญเหตุวิกฤต (Evac SOP):</div>
+            <div style="font-size:9.5px; color:var(--tx-main); line-height:1.4; text-align:left;">
+              <label style="cursor:pointer; display:block; margin:2px 0;"><input type="checkbox" ${completed['task1'] ? 'checked' : ''} onchange="toggleSopItem(this, '${key}', 'ประกาศเขตอพยพเร่งด่วนสู่ที่สูง', 'task1')" style="vertical-align:middle; margin-right:4px;"> ประกาศเขตอพยพเร่งด่วนสู่ที่สูง</label>
+              <label style="cursor:pointer; display:block; margin:2px 0;"><input type="checkbox" ${completed['task2'] ? 'checked' : ''} onchange="toggleSopItem(this, '${key}', 'เตรียมเรือท้องแบนช่วยเหลือด่วน', 'task2')" style="vertical-align:middle; margin-right:4px;"> เตรียมเรือท้องแบนช่วยเหลือด่วน</label>
+              <label style="cursor:pointer; display:block; margin:2px 0;"><input type="checkbox" ${completed['task3'] ? 'checked' : ''} onchange="toggleSopItem(this, '${key}', 'ตั้งจุดรับบำรุงและส่งถุงยังชีพ', 'task3')" style="vertical-align:middle; margin-right:4px;"> ตั้งจุดรับบำรุงและส่งถุงยังชีพ</label>
+            </div>
+          </div>
+        `;
+      } else if (score >= 50) {
+        return `
+          <div style="margin-top:8px; padding-top:8px; border-top:1px dashed rgba(255,255,255,0.15);">
+            <div style="font-weight:bold; font-size:10px; color:#fb923c; margin-bottom:4px;">🟡 แผนป้องกันยุทธ์ (Alert SOP):</div>
+            <div style="font-size:9.5px; color:var(--tx-main); line-height:1.4; text-align:left;">
+              <label style="cursor:pointer; display:block; margin:2px 0;"><input type="checkbox" ${completed['task1'] ? 'checked' : ''} onchange="toggleSopItem(this, '${key}', 'แจ้งเตือนชาวบ้านยกของขึ้นที่สูง', 'task1')" style="vertical-align:middle; margin-right:4px;"> แจ้งเตือนชาวบ้านยกของขึ้นที่สูง</label>
+              <label style="cursor:pointer; display:block; margin:2px 0;"><input type="checkbox" ${completed['task2'] ? 'checked' : ''} onchange="toggleSopItem(this, '${key}', 'เสริมแนวกระสอบทรายตลิ่งรอง', 'task2')" style="vertical-align:middle; margin-right:4px;"> เสริมแนวกระสอบทรายตลิ่งรอง</label>
+              <label style="cursor:pointer; display:block; margin:2px 0;"><input type="checkbox" ${completed['task3'] ? 'checked' : ''} onchange="toggleSopItem(this, '${key}', 'ลาดตระเวนแนวคันดินตลิ่งพัง', 'task3')" style="vertical-align:middle; margin-right:4px;"> ลาดตระเวนแนวคันดินตลิ่งพัง</label>
+            </div>
+          </div>
+        `;
+      } else {
+        return `
+          <div style="margin-top:8px; padding-top:8px; border-top:1px dashed rgba(255,255,255,0.15);">
+            <div style="font-weight:bold; font-size:10px; color:#4ade80; margin-bottom:4px;">🟢 ตรวจการณ์ปกติ (Monitor SOP):</div>
+            <div style="font-size:9.5px; color:var(--tx-muted); line-height:1.4; text-align:left;">
+              • เฝ้าระวังตลิ่งพังจุดสำคัญริมทางน้ำ<br>
+              • ติดตามวิทยุโทรมาตร C.35 และ TMD
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    // Precalculate all 30m grid depths dynamically based on slide values, calibration coefficients, timeline step, and model mode
+    function calculateAll30mDepths() {
+      STATE.current_grid_depths = {};
+      if (typeof AYUTTHAYA_TACTICAL_GRID_30M === 'undefined' || !AYUTTHAYA_TACTICAL_GRID_30M) return;
+      
+      let decay_coef = 0.05;
+      let damping_coef = 0.50;
+      let min_stage_coef = 1.50;
+      
+      if (STATE.model_comparison_mode === 'physical') {
+        decay_coef = 0.15; // Uncalibrated physical decay
+        damping_coef = 0.25; // Raw elevation damping
+      } else if (typeof AYUTTHAYA_CALIBRATION_COEF !== 'undefined' && AYUTTHAYA_CALIBRATION_COEF) {
+        decay_coef = AYUTTHAYA_CALIBRATION_COEF.decay;
+        damping_coef = AYUTTHAYA_CALIBRATION_COEF.damping;
+        min_stage_coef = AYUTTHAYA_CALIBRATION_COEF.min_stage;
+      }
+      
+      // Calculate 4D timeline water travel limit (km)
+      const timeTravelLimit = STATE.time_step_h * 0.15; // km water progressed
+      
+      AYUTTHAYA_TACTICAL_GRID_30M.features.forEach(f => {
+        const dName = f.properties.NAME_2;
+        let dKey = dName;
+        if (dName === "BangSai" && f.properties.GID_2 === "THA.46.13_1") {
+          dKey = "Bang Sai (14.2)";
+        }
+        
+        let discharge = STATE.water_level;
+        const cpDistricts = ["Phak Hai", "Sena", "Bang Ban", "Bang Sai", "Bang Pa-in", "Lat Bua Luang", "Bang Sai (14.2)"];
+        const pasakDistricts = ["Tha Luang", "Tha Rua", "Nakhon Luang", "Phra Nakhon Si Ayutthaya", "Ban Phraek", "Maha Rat", "Phachi"];
+        
+        if (cpDistricts.includes(dKey)) {
+          discharge = STATE.chao_phraya_discharge + (STATE.rain_sim * 4);
+        } else if (pasakDistricts.includes(dKey)) {
+          discharge = (STATE.pasak_discharge * 2.2) + (STATE.rain_sim * 4);
+        } else {
+          discharge = STATE.chao_phraya_discharge + STATE.pasak_discharge + (STATE.rain_sim * 8);
+        }
+        
+        let hWater = 2.0;
+        if (discharge <= 500) hWater = 2.0 + (discharge / 500.0) * 0.8;
+        else if (discharge <= 1000) hWater = 2.8 + ((discharge - 500.0) / 500.0) * 1.0;
+        else if (discharge <= 1500) hWater = 3.8 + ((discharge - 1000.0) / 500.0) * 1.0;
+        else if (discharge <= 2200) hWater = 4.8 + ((discharge - 1500.0) / 700.0) * 0.8;
+        else if (discharge <= 3000) hWater = 5.6 + ((discharge - 2200.0) / 800.0) * 0.6;
+        else hWater = 6.2 + ((discharge - 3000.0) / 1000.0) * 0.4;
+        
+        const distKm = f.properties.distance_to_river_m / 1000.0;
+        let hLocal = hWater;
+        if (distKm > 1.0) {
+          hLocal = hWater - decay_coef * (distKm - 1.0);
+        }
+        hLocal = Math.max(hLocal, min_stage_coef);
+        
+        const cellElev = f.properties.cell_elevation_m;
+        let depth = hLocal - cellElev;
+        
+        if (depth > 0) {
+          const cellSlope = f.properties.slope_degrees;
+          depth = depth * Math.exp(-damping_coef * Math.max(cellSlope - 0.5, 0));
+          
+          // Apply 4D Timeline Spatiotemporal Propagation Factor
+          if (STATE.time_step_h < 24) {
+            if (distKm > timeTravelLimit + 0.5) {
+              depth = 0; // Water hasn't arrived at this distance yet at time T
+            } else if (distKm > timeTravelLimit) {
+              const propFactor = (timeTravelLimit + 0.5 - distKm) / 0.5;
+              depth = depth * Math.max(0, propFactor);
+            }
+          }
+          
+          if (depth < 0.05) depth = 0;
+        } else {
+          depth = 0;
+        }
+        
+        STATE.current_grid_depths[f.properties.cell_id] = depth;
+      });
+    }
+
+    // ══════════════════════════════════════
+    // LAYER RENDERING
+    // ══════════════════════════════════════
+    function renderLayers() {
+      // Precalculate dynamic 30m grid depths
+      calculateAll30mDepths();
+
+      // Reset tambon layers mapping
+      STATE.tambon_layers = {};
+
+      // 1. Render Subdistrict Polygons (Risk Zones)
+      if (STATE.geojson_layer) map.removeLayer(STATE.geojson_layer);
+      if (STATE.layers.tambon) {
+        STATE.geojson_layer = L.geoJSON(AYUTTHAYA_TAMBON_DATA, {
+          style: function (feature) {
+            const score = calculateSubdistrictRisk(feature.properties);
+            const gridActive = STATE.layers.grid_500m || STATE.layers.grid_30m;
+            return {
+              fillColor: getRiskColor(score),
+              weight: 1,
+              opacity: gridActive ? 0.3 : 0.6,
+              color: gridActive ? 'rgba(255, 255, 255, 0.4)' : '#1e293b',
+              fillOpacity: gridActive ? 0.12 : 0.7
+            };
+          },
+          onEachFeature: function (feature, layer) {
+            const props = feature.properties;
+            const score = calculateSubdistrictRisk(props);
+            const key = `${props.NAME_2}_${props.NAME_3}`;
+            STATE.tambon_layers[key] = layer; // Save layer reference in state mapping
+            
+            const depthVal = props.flood_depth > 0
+              ? `<span style="color:#f87171; font-weight:bold;">⚠️ ท่วมสูง ${props.flood_depth.toFixed(2)} ม.</span>`
+              : `<span style="color:#4ade80; font-weight:bold;">🟢 ปกติ (น้ำไม่ท่วม)</span>`;
+
+            const trans = AYUTTHAYA_TRANSLATION_MAP[key] || { tambon_th: props.NAME_3, amphoe_th: props.NAME_2 };
+
+            // Bind rich popup
+            const popupContent = `
+              <div class="popup-title">อ. ${trans.amphoe_th} - ต. ${trans.tambon_th}</div>
+              <div class="popup-row">
+                <span class="popup-lbl">ค่าพยากรณ์ความเสี่ยง:</span>
+                <span class="popup-val" style="color:${getRiskColor(score)}">${score}% (${getRiskLabel(score)})</span>
+              </div>
+              <div class="popup-row">
+                <span class="popup-lbl">ระดับน้ำหลากท่วม:</span>
+                <span class="popup-val">${depthVal}</span>
+              </div>
+              <div class="popup-row">
+                <span class="popup-lbl">ความสูงเฉลี่ย:</span>
+                <span class="popup-val">${props.mean_elevation_m} ม. (MSL)</span>
+              </div>
+              <div class="popup-row">
+                <span class="popup-lbl">ความลาดชัน:</span>
+                <span class="popup-val">${props.slope_degrees}°</span>
+              </div>
+              <div class="popup-row">
+                <span class="popup-lbl">ระยะใกล้เคียงน้ำ:</span>
+                <span class="popup-val">${props.distance_to_river_km} กม.</span>
+              </div>
+              <div class="popup-row" style="margin-top:5px; padding-top:5px; border-top:1px dashed var(--border);">
+                <span class="popup-lbl" style="color:var(--accent);">ปริมาณฝนจำลอง:</span>
+                <span class="popup-val" style="color:var(--accent);">${STATE.rain_sim} มม./ชม.</span>
+              </div>
+              ${(function(){
+                const isCityCore = ["Pratu Chai", "Ho Rattanachai", "Hua Ro", "Tha Wasukri"].includes(props.NAME_3);
+                if (isCityCore) {
+                  return `
+                    <div style="margin-top:6px; padding:4px 6px; background:rgba(56, 189, 248, 0.12); border:1px solid rgba(56, 189, 248, 0.3); border-radius:4px; font-size:9px; line-height:1.35; color:#e2e8f0;">
+                      🛡️ <b>โซนเกาะเมืองอยุธยา (คันกั้นน้ำค้ำประกัน):</b><br>
+                      • DEM สูง ${props.mean_elevation_m}ม. MSL + พนังคอนกรีตสูง<br>
+                      • สถิติท่วมซ้ำซาก: <b style="color:#38bdf8;">ต่ำมาก (&lt; 15%)</b><br>
+                      • เงื่อนไขท่วม: ระบายน้ำเขื่อน &gt;3,000 m³/s หรือฝนสะสม &gt;60 mm/hr
+                    </div>
+                  `;
+                } else {
+                  const isHigh = (props.mean_elevation_m < 5.2 && props.distance_to_river_km < 1.5);
+                  const rateStr = isHigh ? "85% (เสี่ยงท่วมซ้ำซากสูงมาก)" : "45% (เสี่ยงปานกลาง)";
+                  const colorStr = isHigh ? "#f87171" : "#fb923c";
+                  return `
+                    <div style="margin-top:6px; padding:4px 6px; background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.25); border-radius:4px; font-size:9px; line-height:1.35; color:#e2e8f0;">
+                      🌊 <b>สถิติน้ำท่วมซ้ำซาก (GISTDA Flood Frequency):</b><br>
+                      • ความถี่ท่วมซ้ำซาก: <b style="color:${colorStr};">${rateStr}</b><br>
+                      • สถิติท่วมสว่าง: ปี 2554, 2564, 2565, 2567
+                    </div>
+                  `;
+                }
+              })()}
+              ${getMilitarySOP(score, props.NAME_2, props.NAME_3)}
+            `;
+            layer.bindPopup(popupContent);
+
+            // Add hover events
+            layer.on({
+              mouseover: function (e) {
+                const l = e.target;
+                l.setStyle({
+                  weight: 2.5,
+                  color: 'var(--accent)',
+                  fillOpacity: 0.8
+                });
+                l.bringToFront();
+              },
+              mouseout: function (e) {
+                if (STATE.geojson_layer) STATE.geojson_layer.resetStyle(e.target);
+              }
+            });
+          }
+        }).addTo(map);
+      }
+
+      // 2. Render Rivers & Canals
+      if (STATE.river_layer) map.removeLayer(STATE.river_layer);
+      if (STATE.layers.rivers && typeof RIVERS_THAILAND_10M !== 'undefined') {
+        STATE.river_layer = L.geoJSON(RIVERS_THAILAND_10M, {
+          style: function (feature) {
+            const wtype = feature.properties.waterway;
+            if (wtype === 'canal') {
+              return { color: '#22d3ee', weight: 1.8, opacity: 0.8, dashArray: '3, 3' };
+            } else if (wtype === 'stream') {
+              return { color: '#38bdf8', weight: 1.2, opacity: 0.7 };
+            } else { // river
+              return { color: '#0ea5e9', weight: 3.2, opacity: 0.85 };
+            }
+          },
+          onEachFeature: function (feature, layer) {
+            const wtype = feature.properties.waterway;
+            const typeLabel = wtype === 'canal' ? 'คลองส่งน้ำ/ระบายน้ำ' : (wtype === 'stream' ? 'ลำธาร/ลำห้วยสาขา' : 'แม่น้ำสายหลัก');
+            layer.bindPopup(`<b>${feature.properties.name}</b> (${feature.properties.name_en})<br>ประเภท: ${typeLabel}`);
+            layer.on({
+              mouseover: function (e) {
+                e.target.setStyle({ weight: 5, opacity: 1 });
+              },
+              mouseout: function (e) {
+                const wtype = feature.properties.waterway;
+                if (wtype === 'canal') {
+                  e.target.setStyle({ weight: 1.8, opacity: 0.8 });
+                } else if (wtype === 'stream') {
+                  e.target.setStyle({ weight: 1.2, opacity: 0.7 });
+                } else {
+                  e.target.setStyle({ weight: 3.2, opacity: 0.85 });
+                }
+              }
+            });
+          }
+        }).addTo(map);
+      }
+
+      // 3. Render Telemetry Stations
+      if (STATE.stations_layer) map.removeLayer(STATE.stations_layer);
+      if (STATE.layers.stations) {
+        const stationsToRender = (STATE.live_stations && STATE.live_stations.length > 0)
+          ? STATE.live_stations
+          : TELEMETRY_STATIONS;
+
+        const markers = stationsToRender.map(st => {
+          const iconHtml = `<div style="background-color:rgba(14, 165, 233, 0.9); width:24px; height:24px; border-radius:50%; border:2.5px solid #fff; display:flex; align-items:center; justify-content:center; font-size:12px; box-shadow:0 0 10px var(--accent-glow); color:#fff; font-weight:bold;">📡</div>`;
+          const customIcon = L.divIcon({
+            html: iconHtml,
+            className: 'custom-station-icon',
+            iconSize: [24, 24],
+            iconAnchor: [12, 12]
+          });
+          
+          let dischargeText = "N/A";
+          if (st.discharge !== undefined && st.discharge !== null) {
+            dischargeText = `${Math.round(st.discharge).toLocaleString()} m³/s`;
+          } else {
+            let simFlow = STATE.water_level;
+            if (st.id === 'C3') simFlow = Math.round(STATE.water_level * 0.7);
+            dischargeText = `${simFlow.toLocaleString()} m³/s (จำลอง)`;
+          }
+
+          let levelText = "N/A";
+          if (st.level !== undefined && st.level !== null) {
+            levelText = `${parseFloat(st.level).toFixed(2)} ม. (MSL)`;
+          } else {
+            levelText = "ข้อมูลออฟไลน์";
+          }
+          
+          const timeText = st.time || new Date().toLocaleDateString('th-TH');
+          
+          return L.marker([st.lat, st.lon], { icon: customIcon })
+            .bindPopup(`
+              <b>📡 ${st.name}</b><br>
+              <i style="font-size:10px; color:var(--tx-muted);">${st.desc || "รหัสสถานี: " + st.id}</i><br>
+              <div style="margin-top:6px; padding-top:6px; border-top:1px dashed rgba(255,255,255,0.15); font-size:10.5px; line-height:1.4;">
+                ระดับระบายน้ำ: <span style="font-weight:bold; color:var(--accent);">${dischargeText}</span><br>
+                ระดับความสูงน้ำ: <span style="font-weight:bold; color:#4ade80;">${levelText}</span><br>
+                <span style="font-size:9px; color:var(--tx-muted);">เวลาอัปเดต: ${timeText}</span>
+              </div>
+            `);
+        });
+        STATE.stations_layer = L.layerGroup(markers).addTo(map);
+      }
+
+      // 4. Render TMD Radar Overlay
+      if (STATE.radar_layer) map.removeLayer(STATE.radar_layer);
+      if (STATE.layers.radar && typeof TMD_LATEST_RADAR !== 'undefined' && TMD_LATEST_RADAR && TMD_LATEST_RADAR.status === 'success') {
+        const radarBustUrl = TMD_LATEST_RADAR.url + (TMD_LATEST_RADAR.url.includes('?') ? '&' : '?') + "t=" + new Date().getTime();
+        STATE.radar_layer = L.imageOverlay(radarBustUrl, TMD_LATEST_RADAR.bounds, {
+          opacity: 0.6,
+          interactive: false
+        }).addTo(map);
+      }
+
+      // 5. Render 500m high-res grid
+      if (STATE.grid_layer) map.removeLayer(STATE.grid_layer);
+      if (STATE.layers.grid_500m && typeof AYUTTHAYA_HIGHRES_FLOOD_GRID !== 'undefined') {
+        STATE.grid_layer = L.geoJSON(AYUTTHAYA_HIGHRES_FLOOD_GRID, {
+          style: function(feature) {
+            // Recalculate flood depth dynamically based on new slider states
+            const dName = feature.properties.NAME_2;
+            let dKey = dName;
+            if (dName === "BangSai" && feature.properties.GID_2 === "THA.46.13_1") {
+              dKey = "Bang Sai (14.2)";
+            }
+            
+            let discharge = STATE.water_level;
+            const cpDistricts = ["Phak Hai", "Sena", "Bang Ban", "Bang Sai", "Bang Pa-in", "Lat Bua Luang", "Bang Sai (14.2)"];
+            const pasakDistricts = ["Tha Luang", "Tha Rua", "Nakhon Luang", "Phra Nakhon Si Ayutthaya", "Ban Phraek", "Maha Rat", "Phachi"];
+            
+            if (cpDistricts.includes(dKey)) {
+              discharge = STATE.chao_phraya_discharge + (STATE.rain_sim * 4);
+            } else if (pasakDistricts.includes(dKey)) {
+              discharge = (STATE.pasak_discharge * 2.2) + (STATE.rain_sim * 4);
+            } else {
+              discharge = STATE.chao_phraya_discharge + STATE.pasak_discharge + (STATE.rain_sim * 8);
+            }
+            
+            let hWater = 2.0;
+            if (discharge <= 500) hWater = 2.0 + (discharge / 500.0) * 0.8;
+            else if (discharge <= 1000) hWater = 2.8 + ((discharge - 500.0) / 500.0) * 1.0;
+            else if (discharge <= 1500) hWater = 3.8 + ((discharge - 1000.0) / 500.0) * 1.0;
+            else if (discharge <= 2200) hWater = 4.8 + ((discharge - 1500.0) / 700.0) * 0.8;
+            else if (discharge <= 3000) hWater = 5.6 + ((discharge - 2200.0) / 800.0) * 0.6;
+            else hWater = 6.2 + ((discharge - 3000.0) / 1000.0) * 0.4;
+            
+            const distKm = feature.properties.distance_to_river_m / 1000.0;
+            let hLocal = hWater;
+            if (distKm > 1.0) {
+              hLocal = hWater - 0.15 * (distKm - 1.0);
+            }
+            hLocal = Math.max(hLocal, 2.0);
+            
+            const cellElev = feature.properties.cell_elevation_m;
+            let depth = hLocal - cellElev;
+            
+            if (depth > 0) {
+              const cellSlope = feature.properties.slope_degrees;
+              depth = depth * Math.exp(-0.25 * Math.max(cellSlope - 0.5, 0));
+              if (depth < 0.05) depth = 0;
+            } else {
+              depth = 0;
+            }
+            
+            feature.properties.dynamic_depth = depth;
+            
+            if (depth === 0) {
+              return { fillColor: 'transparent', weight: 0.5, opacity: 0.2, color: 'rgba(255,255,255,0.15)', fillOpacity: 0 };
+            } else if (depth <= 0.3) {
+              return { fillColor: '#eab308', weight: 0.5, opacity: 0.4, color: '#ca8a04', fillOpacity: 0.5 }; // Yellow
+            } else if (depth <= 0.8) {
+              return { fillColor: '#f97316', weight: 0.5, opacity: 0.5, color: '#ea580c', fillOpacity: 0.65 }; // Orange
+            } else {
+              return { fillColor: '#ef4444', weight: 0.5, opacity: 0.6, color: '#dc2626', fillOpacity: 0.8 }; // Red
+            }
+          },
+          onEachFeature: function(feature, layer) {
+            const props = feature.properties;
+            layer.bindPopup(function() {
+              const key = `${props.NAME_2}_${props.NAME_3}`;
+              const trans = AYUTTHAYA_TRANSLATION_MAP[key] || { tambon_th: props.NAME_3, amphoe_th: props.NAME_2 };
+              const depth = props.dynamic_depth || 0.0;
+              const depthText = depth > 0 
+                ? `<span style="color:#f87171; font-weight:bold;">🌊 ท่วมสูง ${depth.toFixed(2)} ม.</span>`
+                : `<span style="color:#4ade80;">🟢 ปกติ (แห้ง)</span>`;
+                
+              return `
+                <div class="popup-title">🔍 ข้อมูลกริดยุทธวิธี (500m)</div>
+                <div style="font-size:10.5px; line-height:1.4; color:var(--tx-muted);">
+                  ต. ${trans.tambon_th} (อ. ${trans.amphoe_th})<br>
+                  ระดับดิน: <b>${props.cell_elevation_m.toFixed(2)} ม. (MSL)</b><br>
+                  ห่างแม่น้ำ: <b>${(props.distance_to_river_m / 1000.0).toFixed(2)} กม.</b><br>
+                  ความชัน: <b>${props.slope_degrees.toFixed(2)}°</b><br>
+                  <div style="margin-top:6px; padding-top:6px; border-top:1px dashed rgba(255,255,255,0.15); font-size:11px;">
+                    สภาพพยากรณ์: ${depthText}
+                  </div>
+                </div>
+              `;
+            });
+          }
+        }).addTo(map);
+      }
+
+      // 5.5 Render 30m tactical high-res grid (Optimized: only render flooded cells)
+      if (STATE.grid_30m_layer) map.removeLayer(STATE.grid_30m_layer);
+      if (STATE.layers.grid_30m && typeof AYUTTHAYA_TACTICAL_GRID_30M !== 'undefined') {
+        const floodedFeatures30m = AYUTTHAYA_TACTICAL_GRID_30M.features.filter(f => {
+          const cellId = f.properties.cell_id;
+          const depth = (STATE.current_grid_depths && STATE.current_grid_depths[cellId] !== undefined)
+            ? STATE.current_grid_depths[cellId] : 0.0;
+          
+          f.properties.dynamic_depth = depth;
+          return depth > 0;
+        });
+
+        const gridGeoJson = L.geoJSON({
+          type: "FeatureCollection",
+          features: floodedFeatures30m
+        }, {
+          style: function(feature) {
+            const depth = feature.properties.dynamic_depth;
+            if (depth <= 0.3) {
+              return { fillColor: '#ca8a04', weight: 1.5, opacity: 0.9, color: '#1e1b4b', fillOpacity: 0.80 }; // Yellow with dark indigo border
+            } else if (depth <= 0.8) {
+              return { fillColor: '#ea580c', weight: 1.5, opacity: 0.9, color: '#1e1b4b', fillOpacity: 0.85 }; // Orange with dark indigo border
+            } else {
+              return { fillColor: '#dc2626', weight: 1.5, opacity: 0.9, color: '#1e1b4b', fillOpacity: 0.90 }; // Red with dark indigo border
+            }
+          },
+          onEachFeature: function(feature, layer) {
+            const props = feature.properties;
+            layer.bindPopup(function() {
+              const key = `${props.NAME_2}_${props.NAME_3}`;
+              const trans = AYUTTHAYA_TRANSLATION_MAP[key] || { tambon_th: props.NAME_3, amphoe_th: props.NAME_2 };
+              const depth = props.dynamic_depth || 0.0;
+              return `
+                <div class="popup-title">🎯 พิกัดยุทธวิธีความละเอียดสูง (30m Grid)</div>
+                <div style="font-size:10.5px; line-height:1.4; color:var(--tx-muted);">
+                  ต. ${trans.tambon_th} (อ. ${trans.amphoe_th})<br>
+                  ระดับดิน: <b>${props.cell_elevation_m.toFixed(2)} ม. (MSL)</b><br>
+                  ห่างแม่น้ำ: <b>${(props.distance_to_river_m / 1000.0).toFixed(2)} กม.</b><br>
+                  ความชัน: <b>${props.slope_degrees.toFixed(2)}°</b><br>
+                  <div style="margin-top:6px; padding-top:6px; border-top:1px dashed rgba(255,255,255,0.15); font-size:11px; font-weight:bold;">
+                    🌊 ระดับท่วมคาดการณ์: <span style="color:#ef4444;">ท่วมสูง ${depth.toFixed(2)} ม.</span>
+                  </div>
+                  <div style="margin-top:4px; padding-top:4px; border-top:1px dotted rgba(255,255,255,0.1); font-size:9.5px; color:#9ca3af;">
+                    📊 เปรียบเทียบประวัติศาสตร์:<br>
+                    • ปีน้ำหลาก 2567 (Peak): ${props.depth_2567 > 0 ? `<span style="color:#fb923c;">ท่วม ${props.depth_2567.toFixed(2)} ม.</span>` : '<span style="color:#4ade80;">ปลอดภัย (แห้ง)</span>'}<br>
+                    • วิกฤตปี 2554 (Super Flood): ${props.depth_2554 > 0 ? `<span style="color:#f87171; font-weight:bold;">ท่วม ${props.depth_2554.toFixed(2)} ม.</span>` : '<span style="color:#4ade80;">ปลอดภัย (แห้ง)</span>'}
+                  </div>
+                  <div style="margin-top:6px; padding-top:6px; border-top:1px dashed rgba(167,139,250,0.3); font-size:9.5px; color:#c084fc; font-weight:bold;">
+                    ℹ️ ประโยชน์: วิเคราะห์เส้นทางตัดขาด / ค้นหาจุดแห้งตั้งลานฮ.-เครื่องปั่นไฟสำรอง ในแนวท่อระบายน้ำเชื่อมแม่น้ำ
+                  </div>
+                </div>
+              `;
+            });
+          }
+        });
+
+        // Combine grid and buffer corridors into LayerGroup
+        const layers30m = [gridGeoJson];
+        if (typeof AYUTTHAYA_TACTICAL_CORRIDORS !== 'undefined') {
+          const corridorsLayer = L.geoJSON(AYUTTHAYA_TACTICAL_CORRIDORS, {
+            style: {
+              color: '#a78bfa',
+              weight: 1.2,
+              dashArray: '5, 5',
+              fillColor: '#8b5cf6',
+              fillOpacity: 0.04,
+              interactive: false
+            }
+          });
+          layers30m.push(corridorsLayer);
+        }
+        
+        STATE.grid_30m_layer = L.layerGroup(layers30m).addTo(map);
+      }
+
+      // 6. Render Tactical Assets
+      if (STATE.assets_layer) map.removeLayer(STATE.assets_layer);
+      if (STATE.layers.tactical_assets) {
+        // Inject pulse CSS dynamically if not present
+        if (!document.getElementById('pulse-styles')) {
+          const style = document.createElement('style');
+          style.id = 'pulse-styles';
+          style.innerHTML = `
+            @keyframes pulse-red-anim {
+              0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+              70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+              100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+            }
+            @keyframes pulse-orange-anim {
+              0% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.7); }
+              70% { box-shadow: 0 0 0 10px rgba(249, 115, 22, 0); }
+              100% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0); }
+            }
+            .pulse-red { animation: pulse-red-anim 1.5s infinite; }
+            .pulse-orange { animation: pulse-orange-anim 1.5s infinite; }
+          `;
+          document.head.appendChild(style);
+        }
+
+        const filteredAssets = TACTICAL_ASSETS.filter(asset => {
+          if (STATE.asset_category_filter === 'all') return true;
+          return asset.type === STATE.asset_category_filter;
+        });
+
+        const assetMarkers = filteredAssets.map(asset => {
+          const depth = calculateAssetFloodDepth(asset);
+          
+          let markerColor = '#4ade80';
+          let depthLabel = '🟢 ปลอดภัย (แห้ง)';
+          let pulseClass = '';
+          
+          if (depth > 0) {
+            if (depth <= 0.3) {
+              markerColor = '#eab308';
+              depthLabel = `🟡 เฝ้าระวัง (ขังตื้น ${depth.toFixed(2)} ม.)`;
+            } else if (depth <= 0.8) {
+              markerColor = '#f97316';
+              depthLabel = `🟠 เสี่ยงสูง (ท่วมขังทางเข้า ${depth.toFixed(2)} ม.)`;
+              pulseClass = 'pulse-orange';
+            } else {
+              markerColor = '#ef4444';
+              depthLabel = `🚨 วิกฤต (ท่วมขังสูง ${depth.toFixed(2)} ม.)`;
+              pulseClass = 'pulse-red';
+            }
+          }
+          
+          let iconChar = '🏛️';
+          let typeLabel = 'หน่วยงานราชการ/อบต.';
+          if (asset.type === 'School') { iconChar = '🏫'; typeLabel = 'โรงเรียน'; }
+          else if (asset.type === 'Hospital') { iconChar = '🏥'; typeLabel = 'โรงพยาบาล/รพ.สต.'; }
+          else if (asset.type === 'Temple' || asset.type === 'Heritage') { iconChar = '🛕'; typeLabel = 'วัด/โบราณสถาน'; }
+          else if (asset.type === 'Government' || asset.type === 'Police') { iconChar = '🏛️'; typeLabel = 'หน่วยงานราชการ/อบต.'; }
+          
+          const iconHtml = `
+            <div class="${pulseClass}" style="background-color:${markerColor}; width:26px; height:26px; border-radius:50%; border:2px solid #fff; display:flex; align-items:center; justify-content:center; font-size:13px; box-shadow:0 0 10px rgba(0,0,0,0.5); cursor:pointer;">
+              ${iconChar}
+            </div>
+          `;
+          
+          const customIcon = L.divIcon({
+            html: iconHtml,
+            className: 'custom-asset-icon',
+            iconSize: [26, 26],
+            iconAnchor: [13, 13]
+          });
+          
+          return L.marker([asset.lat, asset.lon], { icon: customIcon })
+            .bindPopup(`
+              <div style="font-size:11.5px; font-weight:bold; border-bottom:1px solid var(--border); padding-bottom:4px; margin-bottom:6px; color:#fff;">
+                ${iconChar} ${asset.name}
+              </div>
+              <div style="font-size:10.5px; line-height:1.4; color:var(--tx-muted);">
+                หมวดหมู่: <b style="color:var(--accent);">${typeLabel}</b><br>
+                พิกัด: <b>${asset.lat.toFixed(4)}, ${asset.lon.toFixed(4)}</b><br>
+                ความสูงดิน: <b>${asset.elevation.toFixed(2)} ม. (MSL)</b><br>
+                ห่างแม่น้ำ: <b>${asset.dist_km.toFixed(2)} กม.</b><br>
+                <div style="margin-top:6px; padding-top:6px; border-top:1px dashed rgba(255,255,255,0.15); font-weight:bold;">
+                  ระดับน้ำท่วมขัง: <span style="color:${markerColor};">${depthLabel}</span>
+                </div>
+                <button onclick="onRouteTargetSelected('${asset.id}')" style="margin-top:6px; width:100%; background:linear-gradient(135deg, #0284c7, #00f3ff); border:none; color:#0f172a; font-weight:bold; padding:4px 8px; border-radius:4px; font-size:10px; cursor:pointer;">
+                  🧭 นำทางกู้ภัยมาที่นี่
+                </button>
+              </div>
+            `);
+        });
+        STATE.assets_layer = L.layerGroup(assetMarkers);
+        
+        // Add to map only if zoom level threshold is met
+        if (map.getZoom() >= STATE.min_asset_zoom) {
+          STATE.assets_layer.addTo(map);
+        }
+        updateAssetsZoomVisibility();
+      }
+
+      // 7. Render Tactical Roads (OSM Roads)
+      if (STATE.roads_layer) map.removeLayer(STATE.roads_layer);
+      if (STATE.layers.roads && typeof AYUTTHAYA_ROADS !== 'undefined') {
+        STATE.roads_layer = L.geoJSON(AYUTTHAYA_ROADS, {
+          style: function (feature) {
+            const cellId = feature.properties.cell_id;
+            let depth = 0;
+            
+            if (cellId !== undefined && cellId !== -1 && STATE.current_grid_depths && STATE.current_grid_depths[cellId] !== undefined) {
+              depth = STATE.current_grid_depths[cellId];
+            }
+            
+            if (depth > 0.25) {
+              return { color: '#ef4444', weight: 2.8, opacity: 0.90 }; // Red (Severely Flooded / Impassable)
+            } else if (depth > 0.05) {
+              return { color: '#f59e0b', weight: 2.2, opacity: 0.85, dashArray: '5, 4' }; // Amber (Shallow Water 5-25cm)
+            } else {
+              const isMainHighway = ['motorway', 'trunk', 'primary'].includes(feature.properties.highway);
+              return { color: isMainHighway ? '#10b981' : '#34d399', weight: isMainHighway ? 2.2 : 1.5, opacity: 0.65 }; // Green (Dry / Safe)
+            }
+          },
+          onEachFeature: function (feature, layer) {
+            const props = feature.properties;
+            layer.bindPopup(function() {
+              const cellId = props.cell_id;
+              const depth = (cellId !== -1 && STATE.current_grid_depths && STATE.current_grid_depths[cellId] !== undefined) 
+                ? STATE.current_grid_depths[cellId] : 0.0;
+              const floodStatus = depth > 0.05 
+                ? `<span style="color:#f87171; font-weight:bold;">⚠️ ท่วมขังสูง ${depth.toFixed(2)} ม. (เส้นทางถูกตัดขาด)</span>` 
+                : `<span style="color:#4ade80; font-weight:bold;">🟢 ปกติ (เส้นทางผ่านได้)</span>`;
+                
+              const probRisk = Math.min(99, Math.max(0, Math.round((depth / 0.8) * 85 + (STATE.rain_sim / 60) * 15)));
+              const riskColor = probRisk > 70 ? '#f87171' : (probRisk > 30 ? '#fb923c' : '#4ade80');
+              const modeText = STATE.model_comparison_mode === 'ai_sar' ? '🤖 AI SAR Cal' : (STATE.model_comparison_mode === 'physical' ? '📐 Physical Baseline' : '🛰️ Sentinel-1 Real Sat');
+
+              return `
+                <div class="popup-title">🛣️ เส้นทางส่งกำลังบำรุงยุทธวิธี</div>
+                <div style="font-size:10.5px; line-height:1.4; color:var(--tx-muted);">
+                  ชื่อถนน: <b>${props.name}</b><br>
+                  ประเภท: <b>${props.highway}</b><br>
+                  <div style="margin-top:6px; padding-top:6px; border-top:1px dashed rgba(255,255,255,0.15); font-weight:bold;">
+                    สถานะเส้นทาง: ${floodStatus}
+                  </div>
+                  <div style="margin-top:4px; padding-top:4px; border-top:1px dotted rgba(255,255,255,0.1); font-size:9.5px; color:#e2e8f0;">
+                    🎲 ความน่าจะเป็นเส้นทางถูกตัดขาด (Probabilistic Risk): <b style="color:${riskColor}; font-weight:bold;">${probRisk}%</b><br>
+                    ⏱️ ห้วงเวลาวิเคราะห์: <b>T+${STATE.time_step_h}h</b> | โหมด: <b>${modeText}</b>
+                  </div>
+                </div>
+              `;
+            });
+          }
+        }).addTo(map);
+        if (STATE.roads_layer) STATE.roads_layer.bringToFront();
+      }
+
+      // Re-populate sidebar risk lists & stats
+      updateUI();
+    }
+
+    function toggleLayer(name) {
+      const chk = document.getElementById(`chk-${name}`);
+      if (chk) {
+        STATE.layers[name] = chk.checked;
+      }
+      
+      if (name === 'surveys') {
+        // Toggle visibility of existing Survey123 markers
+        STATE.survey_markers.forEach(m => {
+          if (STATE.layers.surveys) {
+            m.layer.addTo(map);
+          } else {
+            map.removeLayer(m.layer);
+          }
+        });
+      } else if (name === 'radar') {
+        // Toggle visibility of Radar layer independently to avoid conflict
+        if (STATE.layers.radar) {
+          syncTmdRadarLive();
+        } else {
+          if (STATE.radar_layer) {
+            map.removeLayer(STATE.radar_layer);
+            STATE.radar_layer = null;
+          }
+          showRadarLegend(false);
+        }
+      } else {
+        renderLayers();
+      }
+      
+      // Log to telemetry console
+      const consoleEl = document.getElementById('feed-console');
+      const timeStr = new Date().toLocaleTimeString();
+      const statusText = STATE.layers[name] ? 'เปิดการแสดงผล' : 'ปิดการแสดงผล';
+      const logItem = document.createElement('div');
+      logItem.className = 'feed-item';
+      
+      const layerNames = {
+        tambon: 'ขอบเขตตำบลความเสี่ยง',
+        rivers: 'โครงข่ายทางน้ำ',
+        stations: 'สถานีโทรมาตรวัดน้ำ',
+        surveys: 'รายงานกำลังพล Survey123',
+        radar: 'เรดาร์ฝนสด TMD Live',
+        grid_500m: 'ข่ายกริดคาดการณ์สูง 500m',
+        grid_30m: 'ข่ายกริดยุทธวิธี 30m',
+        tactical_assets: 'พิกัดจุดสถานที่ยุทธศาสตร์',
+        roads: 'เส้นทางส่งกำลังบำรุงยุทธวิธี'
+      };
+      
+      if (name === 'radar' && STATE.layers.radar && typeof TMD_LATEST_RADAR !== 'undefined' && TMD_LATEST_RADAR) {
+        if (TMD_LATEST_RADAR.status === 'success') {
+          logItem.innerHTML = `[${timeStr}] 📡 เรดาร์สด: ${TMD_LATEST_RADAR.title} (${TMD_LATEST_RADAR.valid_time})`;
+        } else {
+          logItem.innerHTML = `[${timeStr}] ❌ เรดาร์สด: ไม่สามารถแสดงผลได้ (${TMD_LATEST_RADAR.message || 'ไม่มีไฟล์ภาพ'})`;
+        }
+      } else {
+        logItem.innerHTML = `[${timeStr}] ⚙️ ระบบ: ${statusText}ชั้นข้อมูล "${layerNames[name]}"`;
+      }
+      consoleEl.prepend(logItem);
+    }
+
+    // ══════════════════════════════════════
+    // UI UPDATES
+    // ══════════════════════════════════════
+    function updateUI() {
+      const stats = { crit: 0, high: 0, mid: 0, low: 0 };
+      const listData = [];
+
+      AYUTTHAYA_TAMBON_DATA.features.forEach(f => {
+        const props = f.properties;
+        const score = calculateSubdistrictRisk(props);
+        
+        const key = `${props.NAME_2}_${props.NAME_3}`;
+        const trans = AYUTTHAYA_TRANSLATION_MAP[key] || { tambon_th: props.NAME_3, amphoe_th: props.NAME_2 };
+        const name = `ต. ${trans.tambon_th} (อ. ${trans.amphoe_th})`;
+        
+        if (score >= 80) stats.crit++;
+        else if (score >= 60) stats.high++;
+        else if (score >= 40) stats.mid++;
+        else stats.low++;
+
+        listData.push({ name: name, score: score, props: props });
+      });
+
+      // Update overview cards
+      document.getElementById('stat-crit').textContent = stats.crit;
+      document.getElementById('stat-high').textContent = stats.high;
+      document.getElementById('stat-mid').textContent = stats.mid;
+      document.getElementById('stat-low').textContent = stats.low;
+
+      // Update right sidebar survey123 selector (only once during load)
+      const selectEl = document.getElementById('survey-tambon');
+      if (selectEl.children.length <= 1) {
+        // Sort sub-districts alphabetically
+        const sortedList = [...listData].sort((a,b) => a.name.localeCompare(b.name, 'th'));
+        sortedList.forEach(item => {
+          const opt = document.createElement('option');
+          opt.value = `${item.props.NAME_2}_${item.props.NAME_3}`;
+          opt.textContent = item.name;
+          selectEl.appendChild(opt);
+        });
+      }
+
+      // Render top risk list (sorted by risk desc)
+      const listEl = document.getElementById('risk-list');
+      listEl.innerHTML = '';
+      const topRisks = listData
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 15); // Show top 15 risk subdistricts
+
+      topRisks.forEach((item, index) => {
+        let badgeClass = 'badge-low';
+        if (item.score >= 80) badgeClass = 'badge-crit';
+        else if (item.score >= 60) badgeClass = 'badge-high';
+        else if (item.score >= 40) badgeClass = 'badge-mid';
+
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'list-item';
+        const depthInfo = item.props.flood_depth > 0
+          ? `<span style="color:#f87171; font-weight:bold; margin-left:4px;">🌊 ท่วม ${item.props.flood_depth.toFixed(2)} ม.</span>`
+          : `<span style="color:#4ade80; margin-left:4px;">🟢 แห้ง</span>`;
+
+        itemDiv.innerHTML = `
+          <div>
+            <div class="list-item-name">${item.name}</div>
+            <div class="list-item-sub">สูง ${item.props.mean_elevation_m} ม. / ห่างน้ำ ${item.props.distance_to_river_km} กม. | ${depthInfo}</div>
+          </div>
+          <div class="list-item-val ${badgeClass}">${item.score}%</div>
+        `;
+        
+        // Pan map and open popup on click
+        itemDiv.onclick = function() {
+          const key = `${item.props.NAME_2}_${item.props.NAME_3}`;
+          const layer = STATE.tambon_layers[key];
+          if (layer) {
+            const bounds = layer.getBounds();
+            map.fitBounds(bounds, { maxZoom: 12 });
+            layer.openPopup();
+          }
+        };
+
+        listEl.appendChild(itemDiv);
+      });
+
+      // Update tactical assets UI list
+      updateTacticalAssetsUI();
+    }
+
+    function updateTacticalAssetsUI() {
+      const container = document.getElementById('tactical-assets-list');
+      if (!container) return;
+      container.innerHTML = '';
+      
+      let affectedCount = 0;
+      
+      const sortedAssets = [...TACTICAL_ASSETS].map(asset => {
+        const depth = calculateAssetFloodDepth(asset);
+        return { ...asset, depth };
+      }).sort((a, b) => b.depth - a.depth);
+      
+      sortedAssets.forEach(asset => {
+        if (asset.depth > 0) {
+          affectedCount++;
+          const itemDiv = document.createElement('div');
+          itemDiv.style.padding = '5px 8px';
+          itemDiv.style.borderRadius = '4px';
+          itemDiv.style.marginBottom = '4px';
+          itemDiv.style.display = 'flex';
+          itemDiv.style.alignItems = 'center';
+          itemDiv.style.justifyContent = 'space-between';
+          itemDiv.style.cursor = 'pointer';
+          itemDiv.style.transition = 'background 0.2s';
+          
+          let severityColor = '#eab308';
+          let bg = 'rgba(234, 179, 8, 0.1)';
+          let border = '1px solid rgba(234, 179, 8, 0.2)';
+          let icon = '⚠️';
+          
+          if (asset.depth > 0.8) {
+            severityColor = '#ef4444';
+            bg = 'rgba(239, 68, 68, 0.12)';
+            border = '1px solid rgba(239, 68, 68, 0.25)';
+            icon = '🚨';
+          } else if (asset.depth > 0.3) {
+            severityColor = '#f97316';
+            bg = 'rgba(249, 115, 22, 0.12)';
+            border = '1px solid rgba(249, 115, 22, 0.25)';
+            icon = '🟠';
+          }
+          
+          itemDiv.style.background = bg;
+          itemDiv.style.border = border;
+          
+          itemDiv.innerHTML = `
+            <div style="font-weight:bold; color:#fff; display:flex; align-items:center; gap:4px;">
+              <span>${icon}</span>
+              <span>${asset.name}</span>
+            </div>
+            <div style="font-weight:bold; color:${severityColor}; font-family:'Outfit', sans-serif;">
+              ท่วม ${asset.depth.toFixed(2)} ม.
+            </div>
+          `;
+          
+          itemDiv.onmouseover = () => { itemDiv.style.background = bg.replace('0.1', '0.2').replace('0.12', '0.24'); };
+          itemDiv.onmouseout = () => { itemDiv.style.background = bg; };
+          
+          itemDiv.onclick = () => {
+            map.setView([asset.lat, asset.lon], 14);
+            if (STATE.assets_layer) {
+              STATE.assets_layer.eachLayer(layer => {
+                if (layer.getLatLng && layer.getLatLng().lat === asset.lat && layer.getLatLng().lng === asset.lon) {
+                  layer.openPopup();
+                }
+              });
+            }
+          };
+          
+          container.appendChild(itemDiv);
+        }
+      });
+      
+      if (affectedCount === 0) {
+        container.innerHTML = `
+          <div style="text-align:center; padding:10px; color:#4ade80; background:rgba(74, 222, 128, 0.08); border:1px solid rgba(74, 222, 128, 0.15); border-radius:4px; font-weight:bold;">
+            🟢 ทุกจุดยุทธศาสตร์ยุทธวิธี ปกติ (แห้ง)
+          </div>
+        `;
+      }
+    }
+
+    // ══════════════════════════════════════
+    // SIMULATION CONTROLS
+    // ══════════════════════════════════════
+    function updateRainSimulation(val) {
+      STATE.rain_sim = parseFloat(val);
+      document.getElementById('slider-rain-val').textContent = `${val} mm/hr`;
+      
+      // Update rainfall text indicator
+      const rainDesc = document.getElementById('rain-desc');
+      const liveRain = document.getElementById('live-rain');
+      if (liveRain) liveRain.textContent = val;
+      
+      if (rainDesc) {
+        if (val >= 45) {
+          rainDesc.textContent = '(ฝนตกหนักวิกฤต - Flash Flood Alert)';
+          rainDesc.style.color = 'var(--red)';
+        } else if (val >= 25) {
+          rainDesc.textContent = '(ฝนตกหนัก)';
+          rainDesc.style.color = 'var(--orange)';
+        } else if (val >= 10) {
+          rainDesc.textContent = '(ฝนปานกลาง)';
+          rainDesc.style.color = 'var(--yellow)';
+        } else {
+          rainDesc.textContent = '(ฝนเบาบาง)';
+          rainDesc.style.color = 'var(--green)';
+        }
+      }
+
+      // Live station discharge updates alongside rain simulation
+      const combinedDischarge = Math.round(STATE.chao_phraya_discharge + STATE.pasak_discharge + (val * 8));
+      STATE.water_level = combinedDischarge;
+      
+      const c35El = document.getElementById('c35-discharge');
+      if (c35El) {
+        c35El.textContent = combinedDischarge.toLocaleString();
+        if (combinedDischarge >= 1500) {
+          c35El.style.color = 'var(--red)';
+        } else if (combinedDischarge >= 1200) {
+          c35El.style.color = 'var(--orange)';
+        } else {
+          c35El.style.color = '#38bdf8';
+        }
+      }
+
+      // Rerender risk layers
+      renderLayers();
+    }
+
+    function updateDamSimulation(type, val) {
+      if (type === 'cp') {
+        STATE.chao_phraya_discharge = parseFloat(val);
+        document.getElementById('slider-cp-val').textContent = `${parseFloat(val).toLocaleString()} m³/s`;
+      } else if (type === 'pasak') {
+        STATE.pasak_discharge = parseFloat(val);
+        document.getElementById('slider-pasak-val').textContent = `${parseFloat(val).toLocaleString()} m³/s`;
+      }
+      
+      // Update combined water level
+      const combinedDischarge = Math.round(STATE.chao_phraya_discharge + STATE.pasak_discharge + (STATE.rain_sim * 8));
+      STATE.water_level = combinedDischarge;
+      
+      const c35El = document.getElementById('c35-discharge');
+      if (c35El) {
+        c35El.textContent = combinedDischarge.toLocaleString();
+        if (combinedDischarge >= 1500) {
+          c35El.style.color = 'var(--red)';
+        } else if (combinedDischarge >= 1200) {
+          c35El.style.color = 'var(--orange)';
+        } else {
+          c35El.style.color = '#38bdf8';
+        }
+      }
+      
+      renderLayers();
+    }
+
+    async function fetchLiveTelemetry() {
+      console.log("Connecting to live HAII/TMD APIs...");
+      const consoleEl = document.getElementById('feed-console');
+      const timeStr = new Date().toLocaleTimeString();
+      
+      const logItem = document.createElement('div');
+      logItem.className = 'feed-item';
+      logItem.innerHTML = `[${timeStr}] 📡 กำลังเชื่อมโยง API โทรมาตรสด (HAII API)...`;
+      consoleEl.prepend(logItem);
+
+      const targetUrl = 'https://api-v2.thaiwater.net/api/v1/thaiwater/weather/map_station?station_type=tele_water';
+      let response = null;
+      let usedProxy = false;
+      
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
+        response = await fetch(targetUrl, { signal: controller.signal });
+        clearTimeout(timeoutId);
+      } catch (e) {
+        try {
+          const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 3000);
+          response = await fetch(proxyUrl, { signal: controller.signal });
+          clearTimeout(timeoutId);
+          usedProxy = true;
+        } catch (proxyError) {
+          // Quiet fallback to Offline Dam Telemetry
+        }
+      }
+      
+      if (response && response.ok) {
+        try {
+          const rawText = await response.text();
+          let data;
+          try {
+            data = JSON.parse(rawText);
+          } catch(err) {
+            // allorigins wraps it in a wrapper if we didn't use raw, or sometimes needs unpacking
+            const wrapped = JSON.parse(rawText);
+            data = typeof wrapped.contents === 'string' ? JSON.parse(wrapped.contents) : wrapped;
+          }
+
+          if (data && data.data) {
+            const stations = data.data;
+            let c2Flow = 0;
+            let c13Flow = 0;
+            let pasakFlow = 0;
+            
+            stations.forEach(s => {
+              const stName = s.station?.station_name?.th || "";
+              const stCode = s.station?.station_code || "";
+              const discharge = s.water_discharge?.value;
+              
+              if (stCode === "C2" || stName.includes("C.2") || (stName.includes("นครสวรรค์") && stName.includes("เมือง"))) {
+                if (discharge !== undefined && discharge !== null) c2Flow = discharge;
+              }
+              if (stCode === "C13" || stName.includes("C.13") || stName.includes("เขื่อนเจ้าพระยา")) {
+                if (discharge !== undefined && discharge !== null) c13Flow = discharge;
+              }
+              if (stName.includes("เขื่อนป่าสัก") || stName.includes("ป่าสักชลสิทธิ์") || stName.includes("พระราม 6") || stName.includes("พระราม๖")) {
+                if (discharge !== undefined && discharge !== null) pasakFlow = discharge;
+              }
+            });
+            
+            let updatedAny = false;
+            if (c13Flow > 0) {
+              STATE.chao_phraya_discharge = c13Flow;
+              const slider = document.getElementById('slider-cp');
+              if (slider) slider.value = c13Flow;
+              const display = document.getElementById('slider-cp-val');
+              if (display) display.textContent = `${Math.round(c13Flow).toLocaleString()} m³/s`;
+              updatedAny = true;
+            }
+            if (pasakFlow > 0) {
+              STATE.pasak_discharge = pasakFlow;
+              const slider = document.getElementById('slider-pasak');
+              if (slider) slider.value = pasakFlow;
+              const display = document.getElementById('slider-pasak-val');
+              if (display) display.textContent = `${Math.round(pasakFlow).toLocaleString()} m³/s`;
+              updatedAny = true;
+            }
+            
+            if (updatedAny) {
+              const combinedDischarge = Math.round(STATE.chao_phraya_discharge + STATE.pasak_discharge + (STATE.rain_sim * 8));
+              STATE.water_level = combinedDischarge;
+              const c35El = document.getElementById('c35-discharge');
+              if (c35El) c35El.textContent = combinedDischarge.toLocaleString();
+              
+              renderLayers();
+              updateUI();
+            }
+            
+            const logSuccess = document.createElement('div');
+            logSuccess.className = 'feed-item';
+            logSuccess.style.color = '#4ade80';
+            logSuccess.innerHTML = `[${new Date().toLocaleTimeString()}] ✅ ซิงก์ข้อมูลโทรมาตรสดสำเร็จ (C.13: ${Math.round(STATE.chao_phraya_discharge).toLocaleString()} m³/s | เขื่อนป่าสัก: ${Math.round(STATE.pasak_discharge).toLocaleString()} m³/s)`;
+            consoleEl.prepend(logSuccess);
+            
+            const syncTimeEl = document.getElementById('sync-time-label');
+            if (syncTimeEl) {
+              syncTimeEl.textContent = `อัปเดตล่าสุด: ${new Date().toLocaleTimeString()}`;
+              syncTimeEl.style.color = '#4ade80';
+            }
+            return;
+          }
+        } catch (parseError) {
+          console.error("Telemetry data parsing error:", parseError);
+        }
+      }
+      
+      // Fallback
+      const logFail = document.createElement('div');
+      logFail.className = 'feed-item';
+      logFail.style.color = 'var(--yellow)';
+      logFail.innerHTML = `[${new Date().toLocaleTimeString()}] 📡 โหมด Offline: ดึงค่าสดติดปัญหา CORS/Network (โหลดค่าออฟไลน์สำรองสำเร็จ)`;
+      consoleEl.prepend(logFail);
+      
+      const syncTimeEl = document.getElementById('sync-time-label');
+      if (syncTimeEl) {
+        syncTimeEl.textContent = `อัปเดตล่าสุด: โหมดจำลองประวัติ (Offline)`;
+        syncTimeEl.style.color = 'var(--yellow)';
+      }
+    }
+
+    function loadDateTelemetry(dateString) {
+      const consoleEl = document.getElementById('feed-console');
+      const timeStr = new Date().toLocaleTimeString();
+      
+      if (typeof DAM_HIST_DATA === 'undefined') {
+        const logItem = document.createElement('div');
+        logItem.className = 'feed-item';
+        logItem.style.color = 'var(--red)';
+        logItem.innerHTML = `[${timeStr}] ❌ ระบบ: ไม่พบฐานข้อมูลโทรมาตรประวัติศาสตร์`;
+        consoleEl.prepend(logItem);
+        return;
+      }
+      
+      const record = DAM_HIST_DATA[dateString];
+      if (!record) {
+        const logItem = document.createElement('div');
+        logItem.className = 'feed-item';
+        logItem.style.color = 'var(--yellow)';
+        logItem.innerHTML = `[${timeStr}] ⚠️ ระบบ: ไม่มีข้อมูลสำหรับวันที่ ${dateString}`;
+        consoleEl.prepend(logItem);
+        return;
+      }
+      
+      const cpInflow = record.cp_nakhon_sawan || 1150.0;
+      let pasakDischarge = (record.cp_ayutthaya || 1400.0) - cpInflow;
+      if (pasakDischarge < 50) pasakDischarge = 120.0;
+      if (pasakDischarge > 1200) pasakDischarge = 800.0;
+      
+      const cpSlider = document.getElementById('slider-cp');
+      const pasakSlider = document.getElementById('slider-pasak');
+      
+      if (cpSlider) {
+        cpSlider.value = Math.min(Math.max(Math.round(cpInflow), 500), 3500);
+        document.getElementById('slider-cp-val').textContent = `${Math.round(cpInflow).toLocaleString()} m³/s`;
+      }
+      
+      if (pasakSlider) {
+        pasakSlider.value = Math.min(Math.max(Math.round(pasakDischarge), 50), 1200);
+        document.getElementById('slider-pasak-val').textContent = `${Math.round(pasakDischarge).toLocaleString()} m³/s`;
+      }
+      
+      STATE.chao_phraya_discharge = cpInflow;
+      STATE.pasak_discharge = pasakDischarge;
+      
+      const combinedDischarge = Math.round(cpInflow + pasakDischarge + (STATE.rain_sim * 8));
+      STATE.water_level = combinedDischarge;
+      
+      const c35El = document.getElementById('c35-discharge');
+      if (c35El) {
+        c35El.textContent = combinedDischarge.toLocaleString();
+        if (combinedDischarge >= 1500) {
+          c35El.style.color = 'var(--red)';
+        } else if (combinedDischarge >= 1200) {
+          c35El.style.color = 'var(--orange)';
+        } else {
+          c35El.style.color = '#38bdf8';
+        }
+      }
+      // Calculate 3-day trend based on Nakhon Sawan C.2 inflow
+      const trendBox = document.getElementById('telemetry-trend-box');
+      const trendVal = document.getElementById('telemetry-trend-val');
+      
+      if (trendBox && trendVal) {
+        const baseDate = new Date(dateString);
+        const nextDate = new Date(baseDate);
+        nextDate.setDate(baseDate.getDate() + 3);
+        const nextDateString = nextDate.toISOString().split('T')[0];
+        
+        const futureRecord = DAM_HIST_DATA[nextDateString];
+        if (futureRecord && futureRecord.cp_nakhon_sawan !== undefined) {
+          const futureInflow = futureRecord.cp_nakhon_sawan;
+          const delta = futureInflow - cpInflow;
+          
+          if (delta > 50) {
+            trendVal.innerHTML = `📈 เพิ่มขึ้น (+${Math.round(delta).toLocaleString()} m³/s) <span style="font-weight:normal; font-size:9.5px; color:#f87171;">(แนวโน้มเสี่ยงภัยเพิ่ม)</span>`;
+            trendVal.style.color = '#ef4444';
+            trendBox.style.borderLeft = '3px solid #ef4444';
+            trendBox.style.background = 'rgba(239, 68, 68, 0.06)';
+          } else if (delta < -50) {
+            trendVal.innerHTML = `📉 ลดลง (${Math.round(delta).toLocaleString()} m³/s) <span style="font-weight:normal; font-size:9.5px; color:#4ade80;">(แนวโน้มดีขึ้น)</span>`;
+            trendVal.style.color = '#22c55e';
+            trendBox.style.borderLeft = '3px solid #22c55e';
+            trendBox.style.background = 'rgba(34, 197, 94, 0.06)';
+          } else {
+            trendVal.innerHTML = `➡️ ทรงตัว (ใกล้เคียงเดิม)`;
+            trendVal.style.color = 'var(--accent)';
+            trendBox.style.borderLeft = '3px solid var(--accent)';
+            trendBox.style.background = 'rgba(56, 189, 248, 0.06)';
+          }
+          trendBox.style.display = 'block';
+        } else {
+          trendBox.style.display = 'none';
+        }
+      }
+      
+      const logItem = document.createElement('div');
+      logItem.className = 'feed-item';
+      logItem.style.color = '#4ade80';
+      const typeLabel = record.type === 'historical' ? 'ประวัติศาสตร์ 2567' : 'คาดการณ์ 2568';
+      logItem.innerHTML = `[${timeStr}] 📅 โหลดวันที่: ${dateString} (${typeLabel})<br>  - เจ้าพระยา: ${Math.round(cpInflow)} m³/s<br>  - ป่าสัก (ประมาณ): ${Math.round(pasakDischarge)} m³/s`;
+      consoleEl.prepend(logItem);
+      
+      renderLayers();
+    }
+
+    function getTmdRadarUrl(delayMinutes) {
+      const now = new Date();
+      const testTime = new Date(now.getTime() - delayMinutes * 60 * 1000);
+      
+      const year = testTime.getUTCFullYear();
+      const month = String(testTime.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(testTime.getUTCDate()).padStart(2, '0');
+      const hour = String(testTime.getUTCHours()).padStart(2, '0');
+      
+      let minutes = testTime.getUTCMinutes();
+      minutes = Math.floor(minutes / 15) * 15;
+      const minStr = String(minutes).padStart(2, '0');
+      
+      const filename = `TMD20_DBZ_MP_MONSOON_DBZ_OVERLAY_${year}${month}${day}_${hour}${minStr}_UTC.png`;
+      return `https://radargis.tmd.go.th/products/leaflet_overlay_dbz/${filename}`;
+    }
+
+    function showRadarLegend(visible) {
+      const el = document.getElementById('radar-legend-overlay');
+      if (el) {
+        if (visible && STATE.layers.radar) {
+          el.style.display = 'flex';
+        } else {
+          el.style.display = 'none';
+        }
+      }
+    }
+
+    function syncTmdRadarLive() {
+      if (!STATE.layers.radar) return;
+      
+      const consoleEl = document.getElementById('feed-console');
+      const timeStr = new Date().toLocaleTimeString();
+      
+      const bounds = [
+        [5.031907742098566, 96.98536027126372],
+        [20.256072293418757, 107.20414544772572]
+      ];
+      
+      function tryLoadRadar(delay) {
+        const url = getTmdRadarUrl(delay);
+        console.log("Preloading live radar frame with delay:", delay, "URL:", url);
+        
+        const img = new Image();
+        img.onload = function() {
+          console.log("Live radar frame preloaded successfully! Delay:", delay);
+          if (STATE.radar_layer) {
+            map.removeLayer(STATE.radar_layer);
+          }
+          STATE.radar_layer = L.imageOverlay(url, bounds, {
+            opacity: 0.6,
+            interactive: false
+          }).addTo(map);
+          
+          const now = new Date();
+          const target = new Date(now.getTime() - delay * 60 * 1000);
+          let minutes = target.getUTCMinutes();
+          minutes = Math.floor(minutes / 15) * 15;
+          const timeLabel = `${target.getUTCFullYear()}-${String(target.getUTCMonth()+1).padStart(2,'0')}-${String(target.getUTCDate()).padStart(2,'0')} ${String(target.getUTCHours()).padStart(2,'0')}:${String(minutes).padStart(2,'0')} UTC`;
+          
+          TMD_LATEST_RADAR = {
+            url: url,
+            bounds: bounds,
+            title: `Live Radar Frame`,
+            valid_time: timeLabel,
+            status: "success"
+          };
+          
+          const logItem = document.createElement('div');
+          logItem.className = 'feed-item';
+          logItem.style.color = '#38bdf8';
+          logItem.innerHTML = `[${new Date().toLocaleTimeString()}] 📡 เรดาร์สด: ซิงก์ภาพล่าสุดสำเร็จ (${timeLabel})`;
+          consoleEl.prepend(logItem);
+          
+          showRadarLegend(true);
+        };
+        
+        img.onerror = function() {
+          console.warn("Failed to preload live radar URL for delay:", delay);
+          if (delay < 80) {
+            tryLoadRadar(delay + 15);
+          } else {
+            console.error("All live radar frames failed. Falling back to local offline assets.");
+            const logItem = document.createElement('div');
+            logItem.className = 'feed-item';
+            logItem.style.color = 'var(--yellow)';
+            logItem.innerHTML = `[${new Date().toLocaleTimeString()}] ⚠️ เรดาร์สด: เชื่อมโยงล้มเหลว (ใช้ภาพจำลองออฟไลน์)`;
+            consoleEl.prepend(logItem);
+            
+            if (typeof TMD_LATEST_RADAR !== 'undefined' && TMD_LATEST_RADAR && TMD_LATEST_RADAR.status === 'success') {
+              if (STATE.radar_layer) {
+                map.removeLayer(STATE.radar_layer);
+              }
+              const offlineUrl = TMD_LATEST_RADAR.url;
+              if (offlineUrl.startsWith('data:')) {
+                STATE.radar_layer = L.imageOverlay(offlineUrl, TMD_LATEST_RADAR.bounds, {
+                  opacity: 0.6,
+                  interactive: false
+                }).addTo(map);
+                showRadarLegend(true);
+              } else {
+                const offlineImg = new Image();
+                offlineImg.onload = function() {
+                  STATE.radar_layer = L.imageOverlay(offlineUrl, TMD_LATEST_RADAR.bounds, {
+                    opacity: 0.6,
+                    interactive: false
+                  }).addTo(map);
+                  showRadarLegend(true);
+                };
+                offlineImg.onerror = function() {
+                  console.error("Failed to load offline radar fallback. Removing radar overlay.");
+                  STATE.radar_layer = null;
+                  showRadarLegend(false);
+                };
+                offlineImg.src = offlineUrl;
+              }
+            }
+          }
+        };
+        
+        img.src = url;
+      }
+      
+      tryLoadRadar(20);
+    }
+
+    // ══════════════════════════════════════
+    // SURVEY123 / CLOSED LOOP FEEDBACK SIMULATOR
+    // ══════════════════════════════════════
+    function submitSurvey123() {
+      const key = document.getElementById('survey-tambon').value;
+      if (!key) return;
+      const level = parseInt(document.getElementById('survey-water-level').value);
+      const parts = key.split('_');
+      const dName = parts[0];
+      const sdName = parts[1];
+
+      // Add to survey array (or update if already exists)
+      const existingIdx = STATE.surveys.findIndex(s => s.tambonKey === key);
+      if (existingIdx >= 0) {
+        STATE.surveys[existingIdx].level = level;
+      } else {
+        STATE.surveys.push({ tambonKey: key, level: level });
+      }
+
+      // Log to Telemetry console
+      const consoleEl = document.getElementById('feed-console');
+      const timeStr = new Date().toLocaleTimeString();
+      let alertTxt = '';
+      if (level === 99) alertTxt = '⚠️ รายงานล้นตลิ่งล้นท่วม (>80 ซม.)';
+      if (level === 50) alertTxt = '⚠️ รายงานน้ำท่วมขังผิวถนน (30-80 ซม.)';
+      if (level === 10) alertTxt = '✅ รายงานสถานการณ์ปกติ (0-10 ซม.)';
+
+      const trans = AYUTTHAYA_TRANSLATION_MAP[key] || { tambon_th: sdName };
+      const logItem = document.createElement('div');
+      logItem.className = 'feed-item';
+      logItem.innerHTML = `[${timeStr}] ทหารราบสนาม: ต.${trans.tambon_th} -> ${alertTxt}`;
+      consoleEl.prepend(logItem);
+
+      // Find the centroid coordinates for the tambon to drop a map marker
+      const features = AYUTTHAYA_TAMBON_DATA.features;
+      const match = features.find(f => f.properties.NAME_2 === dName && f.properties.NAME_3 === sdName);
+      if (match) {
+        // remove old marker if exists for this tambon
+        const oldMarkerIdx = STATE.survey_markers.findIndex(m => m.tambonKey === key);
+        if (oldMarkerIdx >= 0) {
+          map.removeLayer(STATE.survey_markers[oldMarkerIdx].layer);
+          STATE.survey_markers.splice(oldMarkerIdx, 1);
+        }
+
+        const lGeo = L.geoJSON(match);
+        const center = lGeo.getBounds().getCenter();
+
+        // Custom icon color based on level
+        const markerColor = level === 99 ? 'red' : (level === 50 ? 'orange' : 'green');
+        const iconHtml = `<div style="background-color:${markerColor}; width:16px; height:16px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 8px rgba(0,0,0,0.5);"></div>`;
+        
+        const customIcon = L.divIcon({
+          html: iconHtml,
+          className: 'custom-div-icon',
+          iconSize: [16, 16],
+          iconAnchor: [8, 8]
+        });
+
+        const marker = L.marker([center.lat, center.lng], { icon: customIcon })
+          .bindPopup(`<b>📱 รายงาน Survey123 (ส่งกลับข้อมูลสนาม)</b><br>ต. ${sdName}<br>ระดับที่ตรวจพบล่าสุด: ${alertTxt}`);
+
+        if (STATE.layers.surveys) {
+          marker.addTo(map);
+        }
+
+        STATE.survey_markers.push({ tambonKey: key, layer: marker });
+        
+        // Pan map and open popup
+        map.setView([center.lat, center.lng], 11);
+        marker.openPopup();
+      }
+
+      // Rerender maps to trigger model recalibration
+      renderLayers();
+    }
+
+    // ══════════════════════════════════════
+    // EXPORT TO ARCGIS / QGIS (GEOJSON)
+    // ══════════════════════════════════════
+    function exportGeoJSON() {
+      // Create a copy of the GeoJSON structure and inject the dynamic risk score
+      const cloned = JSON.parse(JSON.stringify(AYUTTHAYA_TAMBON_DATA));
+      cloned.features.forEach(f => {
+        const score = calculateSubdistrictRisk(f.properties);
+        f.properties["predicted_risk_score"] = score;
+        f.properties["warning_level"] = getRiskLabel(score);
+        f.properties["source_calibration"] = STATE.surveys.some(s => s.tambonKey === `${f.properties.NAME_2}_${f.properties.NAME_3}`) ? 'Survey123 Field Verified' : 'Model Predicted';
+      });
+
+      // Convert to blob and download
+      const str = JSON.stringify(cloned, null, 2);
+      const blob = new Blob([str], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'ayutthaya_predicted_risks_rtsd.geojson';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      // Log to console feed
+      const consoleEl = document.getElementById('feed-console');
+      const timeStr = new Date().toLocaleTimeString();
+      const logItem = document.createElement('div');
+      logItem.className = 'feed-item';
+      logItem.style.color = '#4ade80';
+      logItem.innerHTML = `[${timeStr}] 📥 ระบบ: ส่งออกข้อมูลพยากรณ์เวกเตอร์แผนที่ (GeoJSON) ไปยัง ArcGIS Portal สำเร็จ!`;
+      consoleEl.prepend(logItem);
+    }
+
+    function exportShapefileCsv() {
+      // Export a coordinate lookup list as CSV (Tambon, Latitude, Longitude, Risk Score)
+      let csv = "Tambon,District,Elevation_m,Slope_deg,Distance_River_km,Predicted_Risk_Score,Warning_Level\n";
+      
+      AYUTTHAYA_TAMBON_DATA.features.forEach(f => {
+        const props = f.properties;
+        const score = calculateSubdistrictRisk(props);
+        const label = getRiskLabel(score);
+        csv += `"${props.NAME_3}","${props.NAME_2}",${props.mean_elevation_m},${props.slope_degrees},${props.distance_to_river_km},${score},"${label}"\n`;
+      });
+
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'ayutthaya_predicted_table_rtsd.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    // ══════════════════════════════════════
+    // SEARCH & GEOLOCATION (GPS)
+    // ══════════════════════════════════════
+    function searchTambon(query) {
+      const box = document.getElementById('search-results-box');
+      if (!query || query.trim() === "") {
+        box.style.display = 'none';
+        box.innerHTML = '';
+        return;
+      }
+      
+      const q = query.toLowerCase().trim();
+      const matches = [];
+      
+      AYUTTHAYA_TAMBON_DATA.features.forEach(f => {
+        const props = f.properties;
+        const key = `${props.NAME_2}_${props.NAME_3}`;
+        const trans = AYUTTHAYA_TRANSLATION_MAP[key] || {};
+        
+        const name3_en = (props.NAME_3 || "").toLowerCase();
+        const name2_en = (props.NAME_2 || "").toLowerCase();
+        const name3_th = (trans.tambon_th || "").toLowerCase();
+        const name2_th = (trans.amphoe_th || "").toLowerCase();
+        
+        if (name3_en.includes(q) || name2_en.includes(q) || name3_th.includes(q) || name2_th.includes(q)) {
+          matches.push({ feature: f, trans: trans });
+        }
+      });
+      
+      if (matches.length === 0) {
+        box.innerHTML = '<div class="search-result-item" style="color:var(--tx-muted); cursor:default;">❌ ไม่พบข้อมูลตำบลนี้</div>';
+        box.style.display = 'block';
+        return;
+      }
+      
+      box.innerHTML = '';
+      matches.slice(0, 10).forEach(m => {
+        const props = m.feature.properties;
+        const trans = m.trans;
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'search-result-item';
+        
+        const displayName = `ต. ${trans.tambon_th || props.NAME_3} (อ. ${trans.amphoe_th || props.NAME_2})`;
+        itemDiv.innerHTML = displayName;
+        
+        itemDiv.onclick = function() {
+          const key = `${props.NAME_2}_${props.NAME_3}`;
+          const layer = STATE.tambon_layers[key];
+          if (layer) {
+            const bounds = layer.getBounds();
+            map.fitBounds(bounds, { maxZoom: 12 });
+            layer.openPopup();
+          }
+          box.style.display = 'none';
+          document.getElementById('txt-search').value = `ต. ${trans.tambon_th || props.NAME_3}`;
+        };
+        box.appendChild(itemDiv);
+      });
+      box.style.display = 'block';
+    }
+    
+    // Hide search results when clicking outside
+    document.addEventListener('click', function(e) {
+      const box = document.getElementById('search-results-box');
+      const input = document.getElementById('txt-search');
+      if (box && e.target !== box && e.target !== input) {
+        box.style.display = 'none';
+      }
+    });
+
+    function locateUserDevice() {
+      const consoleEl = document.getElementById('feed-console');
+      const timeStr = new Date().toLocaleTimeString();
+      
+      const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+      if (!isSecure) {
+        const httpsUrl = `https://${window.location.hostname}:8443`;
+        if (confirm(`⚠️ การรับพิกัด GPS สดบน iPad / มือถือ / เครื่องอื่นในวง LAN:\n\nเบราว์เซอร์ไม่อนุญาตการใช้งาน GPS บน HTTP (http://...)\n\n👉 ท่านต้องการสลับเปิดใช้งานผ่านลิงก์ HTTPS 🔒 เพื่อเปิด GPS ฮาร์ดแวร์ทันทีหรือไม่?\n(${httpsUrl})`)) {
+          window.location.href = httpsUrl;
+          return;
+        } else {
+          toggleNavigatorPanel(true);
+          setRoutingStartMode('map');
+          return;
+        }
+      }
+
+      const logItem = document.createElement('div');
+      logItem.className = 'feed-item';
+      logItem.innerHTML = `[${timeStr}] 📍 กำลังระบุพิกัดตำแหน่งทางทหาร (GPS)...`;
+      if (consoleEl) consoleEl.prepend(logItem);
+      
+      if (!navigator.geolocation) {
+        const logFail = document.createElement('div');
+        logFail.className = 'feed-item';
+        logFail.style.color = 'var(--red)';
+        logFail.innerHTML = `[${new Date().toLocaleTimeString()}] ❌ GPS: เบราว์เซอร์ไม่รองรับ Geolocation`;
+        if (consoleEl) consoleEl.prepend(logFail);
+        alert("⚠️ อุปกรณ์หรือเบราว์เซอร์ไม่รองรับ GPS สลับเข้าสู่โหมดคลิกพิกัดบนแผนที่ให้อัตโนมัติ");
+        toggleNavigatorPanel(true);
+        setRoutingStartMode('map');
+        return;
+      }
+      
+      navigator.geolocation.getCurrentPosition(
+        function(position) {
+          const lat = position.coords.latitude;
+          const lon = position.coords.longitude;
+          
+          console.log(`GPS Location: Lat ${lat}, Lon ${lon}`);
+          STATE.routing_start_coords = [lat, lon];
+          
+          // Clear old GPS marker
+          if (STATE.gps_marker) {
+            map.removeLayer(STATE.gps_marker);
+          }
+          
+          // Custom pulsing GPS icon
+          const gpsIcon = L.divIcon({
+            className: 'custom-gps-pulse',
+            html: '<div class="gps-pulse-dot"></div>',
+            iconSize: [20, 20],
+            iconAnchor: [10, 10]
+          });
+          
+          STATE.gps_marker = L.marker([lat, lon], { icon: gpsIcon }).addTo(map);
+          
+          // Find which subdistrict the user is standing in
+          const match = findTambonAt(lat, lon);
+          const logSuccess = document.createElement('div');
+          logSuccess.className = 'feed-item';
+          logSuccess.style.color = '#38bdf8';
+          
+          if (match) {
+            const props = match.properties;
+            const score = calculateSubdistrictRisk(props);
+            const label = getRiskLabel(score);
+            
+            logSuccess.innerHTML = `[${new Date().toLocaleTimeString()}] 📍 พิกัดปัจจุบัน: ต. ${props.NAME_3} (เสี่ยงภัย: ${score}% - ${label})`;
+            if (consoleEl) consoleEl.prepend(logSuccess);
+            
+            // Zoom to location and open the tambon popup
+            map.setView([lat, lon], 13);
+            
+            const key = `${props.NAME_2}_${props.NAME_3}`;
+            const layer = STATE.tambon_layers[key];
+            if (layer) {
+              layer.openPopup();
+            }
+          } else {
+            // User is outside Ayutthaya pilot area
+            logSuccess.innerHTML = `[${new Date().toLocaleTimeString()}] 📍 พิกัดปัจจุบัน: อยู่นอกพื้นที่อยุธยา (พิกัด: ${lat.toFixed(4)}, ${lon.toFixed(4)})`;
+            if (consoleEl) consoleEl.prepend(logSuccess);
+            
+            // Just center map to user's point
+            map.setView([lat, lon], 12);
+            
+            STATE.gps_marker.bindPopup(`<b>📍 พิกัดทหารราบปัจจุบัน</b><br>ละติจูด: ${lat.toFixed(5)}<br>ลองจิจูด: ${lon.toFixed(5)}<br><span style="color:var(--tx-muted); font-size:10px;">(อยู่นอกพื้นที่คาดการณ์นำร่องอยุธยา)</span>`).openPopup();
+          }
+
+          alert(`🎯 ระบุตำแหน่ง GPS ฮาร์ดแวร์สำเร็จ!\nพิกัด: ${lat.toFixed(4)}, ${lon.toFixed(4)}`);
+        },
+        function(error) {
+          console.warn("Geolocation error:", error);
+          const logFail = document.createElement('div');
+          logFail.className = 'feed-item';
+          logFail.style.color = 'var(--yellow)';
+          logFail.innerHTML = `[${new Date().toLocaleTimeString()}] ⚠️ GPS: เบราว์เซอร์ปฏิเสธ (สลับเข้าสู่โหมดคลิกแผนที่)`;
+          if (consoleEl) consoleEl.prepend(logFail);
+
+          const fallbackLat = 14.3532;
+          const fallbackLon = 100.5684;
+          
+          if (STATE.gps_marker) map.removeLayer(STATE.gps_marker);
+          const gpsIcon = L.divIcon({
+            className: 'custom-gps-pulse',
+            html: '<div class="gps-pulse-dot"></div>',
+            iconSize: [20, 20],
+            iconAnchor: [10, 10]
+          });
+          
+          STATE.gps_marker = L.marker([fallbackLat, fallbackLon], { icon: gpsIcon }).addTo(map);
+          map.setView([fallbackLat, fallbackLon], 12);
+          STATE.gps_marker.bindPopup(`<b>📍 พิกัดยุทธศาสตร์นำร่อง (ศูนย์อยุธยา)</b><br>ละติจูด: 14.3532<br>ลองจิจูด: 100.5684<br><span style="color:#fb923c; font-size:9.5px;">*หากต้องการ GPS สดบนไอแพด ให้เปิดผ่านลิงก์ HTTPS</span>`).openPopup();
+
+          alert("⚠️ ไม่สามารถเข้าถึงตำแหน่ง GPS บนอุปกรณ์นี้ได้ (ติดข้อกำหนดความปลอดภัย HTTP)\n\n📍 ระบบสลับเข้าสู่โหมด 'คลิกพิกัดบนแผนที่' ให้ท่านสลับเลือกพิกัดได้ทันที");
+          toggleNavigatorPanel(true);
+          setRoutingStartMode('map');
+        },
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+      );
+    }
+
+    function updateGpsBadgeStatus() {
+      const iconEl = document.getElementById('gps-status-icon');
+      const textEl = document.getElementById('gps-status-text');
+      const badgeEl = document.getElementById('gps-status-badge');
+      if (!iconEl || !textEl || !badgeEl) return;
+
+      const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      if (isSecure) {
+        iconEl.innerHTML = '🔒';
+        textEl.innerHTML = 'HTTPS Active (GPS พร้อม)';
+        badgeEl.style.borderColor = 'rgba(34, 197, 94, 0.5)';
+        badgeEl.style.color = '#4ade80';
+        badgeEl.style.background = 'rgba(34, 197, 94, 0.15)';
+      } else {
+        iconEl.innerHTML = '🔓';
+        textEl.innerHTML = 'LAN HTTP (แตะสลับเปิด HTTPS 🔒)';
+        badgeEl.style.borderColor = 'rgba(249, 115, 22, 0.5)';
+        badgeEl.style.color = '#fb923c';
+        badgeEl.style.background = 'rgba(249, 115, 22, 0.15)';
+      }
+    }
+
+    function switchHttpsOrExplainGps() {
+      const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      if (!isSecure) {
+        const httpsUrl = `https://${window.location.hostname}:8443`;
+        if (confirm(`🔒 สลับเข้าสู่โหมดรักษาความปลอดภัย HTTPS เพื่อใช้ GPS ฮาร์ดแวร์บน iPad/มือถือ:\n\nเบราว์เซอร์บน iPad/เครื่องอื่นใน LAN ต้องการ HTTPS เพื่อแชร์พิกัด GPS\n\n👉 ท่านต้องการเปลี่ยนไปยัง URL นี้ทันทีหรือไม่?\n${httpsUrl}`)) {
+          window.location.href = httpsUrl;
+        }
+      } else {
+        locateUserDevice();
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', function() {
+      updateGpsBadgeStatus();
+    });
+    
+    function isPointInPolygon(point, vs) {
+      const x = point[0], y = point[1];
+      let inside = false;
+      for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+        const xi = vs[i][0], yi = vs[i][1];
+        const xj = vs[j][0], yj = vs[j][1];
+        
+        const intersect = ((yi > y) !== (yj > y))
+          && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+      }
+      return inside;
+    }
+    
+    function findTambonAt(lat, lon) {
+      if (!AYUTTHAYA_TAMBON_DATA || !AYUTTHAYA_TAMBON_DATA.features) return null;
+      
+      for (let feature of AYUTTHAYA_TAMBON_DATA.features) {
+        const geom = feature.geometry;
+        if (!geom) continue;
+        
+        if (geom.type === "Polygon") {
+          if (isPointInPolygon([lon, lat], geom.coordinates[0])) {
+            return feature;
+          }
+        } else if (geom.type === "MultiPolygon") {
+          for (let poly of geom.coordinates) {
+            if (isPointInPolygon([lon, lat], poly[0])) {
+              return feature;
+            }
+          }
+        }
+      }
+      return null;
+    }
+
+    function toggleRightSidebar() {
+      const sidebar = document.getElementById('right-sidebar');
+      const icon = document.getElementById('toggle-icon');
+      
+      sidebar.classList.toggle('collapsed');
+      
+      if (sidebar.classList.contains('collapsed')) {
+        icon.textContent = '◀';
+      } else {
+        icon.textContent = '▶';
+      }
+      
+      setTimeout(() => {
+        map.invalidateSize();
+      }, 320);
+    }
+
+    // ══════════════════════════════════════
+    // CLOCK & INIT
+    // ══════════════════════════════════════
+    function updateClock() {
+      const d = new Date();
+      document.getElementById('live-clock').textContent = d.toLocaleTimeString('th-TH');
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    function getLocalDateString() {
+      const d = new Date();
+      const offset = d.getTimezoneOffset();
+      const localDate = new Date(d.getTime() - (offset * 60 * 1000));
+      return localDate.toISOString().split('T')[0];
+    }
+
+    // Set initial date picker value and load data
+    const initialDate = getLocalDateString();
+    const dateInput = document.getElementById('sim-date');
+    if (dateInput) {
+      dateInput.value = initialDate;
+    }
+    
+    // Initial render
+    loadDateTelemetry(initialDate);
+    fetchLiveTelemetry();
+    syncTmdRadarLive();
+
+    // Auto-update date if day rolls over (checks every 30 seconds)
+    let lastSystemDate = initialDate;
+    setInterval(() => {
+      const currentSystemDate = getLocalDateString();
+      if (currentSystemDate !== lastSystemDate) {
+        console.log(`System date rolled over to: ${currentSystemDate}`);
+        lastSystemDate = currentSystemDate;
+        const dateInputEl = document.getElementById('sim-date');
+        if (dateInputEl) {
+          dateInputEl.value = currentSystemDate;
+        }
+        loadDateTelemetry(currentSystemDate);
+      }
+    }, 30000);
+
+    // Auto-refresh weather radar every 3 minutes (180,000 ms) in background
+    setInterval(syncTmdRadarLive, 180000);
+    
+    // Auto-refresh HAII river telemetry every 5 minutes (300,000 ms)
+    setInterval(fetchLiveTelemetry, 300000);
+
+    // Dynamic update for Auto-Calibration Indicators from Sentinel-1 metadata
+    function updateCalibrationUI() {
+      if (typeof AYUTTHAYA_CALIBRATION_COEF !== 'undefined' && AYUTTHAYA_CALIBRATION_COEF) {
+        const coef = AYUTTHAYA_CALIBRATION_COEF;
+        const f1El = document.getElementById('cal-f1');
+        const accEl = document.getElementById('cal-accuracy');
+        const decEl = document.getElementById('cal-decay');
+        const dampEl = document.getElementById('cal-damping');
+        const statusEl = document.getElementById('cal-status');
+        
+        if (f1El && typeof coef.best_f1_score === 'number') f1El.innerText = coef.best_f1_score.toFixed(4);
+        if (accEl && typeof coef.accuracy === 'number') accEl.innerText = `${coef.accuracy.toFixed(1)}%`;
+        if (decEl && typeof coef.decay === 'number') decEl.innerText = coef.decay.toFixed(2);
+        if (dampEl && typeof coef.damping === 'number') dampEl.innerText = coef.damping.toFixed(2);
+        
+        if (statusEl) {
+          if (coef.status && coef.status.includes("Calibrated")) {
+            statusEl.innerHTML = `🟢 ระบบสอบเทียบแล้ว (Sentinel-1)`;
+            statusEl.style.color = '#4ade80';
+          } else {
+            statusEl.innerHTML = `🟡 ข้อมูลสากลเริ่มต้น (Uncalibrated)`;
+            statusEl.style.color = '#fbbf24';
+          }
+        }
+      }
+    }
+    updateCalibrationUI();
+  </script>
+</body>
+</html>
